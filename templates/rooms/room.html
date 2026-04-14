@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>小T语音 - 房间 {{ room_id }}</title>
+    <link rel="stylesheet" href="/static/css/room.css">
+</head>
+<body>
+    <canvas id="particleCanvas"></canvas>
+
+    <!-- 背景层 -->
+    <div class="background-layer">
+        <div class="background-image"></div>
+        <div class="fog-effect"></div>
+        <div class="spark-effect spark-1"></div>
+        <div class="spark-effect spark-2"></div>
+        <div class="spark-effect spark-3"></div>
+        <div class="spark-effect spark-4"></div>
+    </div>
+
+    <div class="character-portrait"></div>
+
+    <!-- 主功能面板 -->
+    <div class="function-panel">
+        <!-- 顶部信息卡片 -->
+        <div class="terminal-card terminal-info">
+            <div class="card-header">
+                <div class="card-icon">📡</div>
+                <div class="card-title">终端信息</div>
+            </div>
+            <div class="card-content">
+                <div class="info-row">
+                    <span class="info-label">房间编号</span>
+                    <span class="info-value mono">{{ room_id }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">在线人数</span>
+                    <span class="info-value mono" id="user-count">{{ user_count }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">当前时间</span>
+                    <span class="info-value mono" id="current-time">00:00</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 语音控制卡片 -->
+        <div class="terminal-card terminal-voice">
+            <div class="card-header">
+                <div class="card-icon">🎤</div>
+                <div class="card-title">语音控制</div>
+            </div>
+            <div class="card-content">
+                <div class="voice-controls">
+                    <button class="terminal-btn terminal-btn-primary" onclick="startVoiceClient()">
+                        <span class="btn-icon">▶</span>
+                        <span class="btn-text">启动语音</span>
+                    </button>
+                    <button class="terminal-btn terminal-btn-danger" onclick="stopVoiceClient()">
+                        <span class="btn-icon">⏹</span>
+                        <span class="btn-text">关闭语音</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 功能导航卡片 -->
+        <div class="terminal-card terminal-nav">
+            <div class="card-header">
+                <div class="card-icon">📋</div>
+                <div class="card-title">功能导航</div>
+            </div>
+            <div class="card-content">
+                <div class="nav-grid">
+                    <a class="nav-item" href="/profile">
+                        <div class="nav-icon">👤</div>
+                        <div class="nav-text">个人中心</div>
+                    </a>
+                    <a class="nav-item" href="/leave-room/{{ room_id }}">
+                        <div class="nav-icon">🚪</div>
+                        <div class="nav-text">退出房间</div>
+                    </a>
+                    <a class="nav-item" href="/">
+                        <div class="nav-icon">🏠</div>
+                        <div class="nav-text">返回列表</div>
+                    </a>
+                    <button class="nav-item" id="toggleEditMode">
+                        <div class="nav-icon">🎨</div>
+                        <div class="nav-text">编辑立绘</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部控制条 -->
+    <div class="edit-bottom-bar" id="editBottomBar">
+        <div class="bottom-bar-item">
+            <div class="bottom-bar-label">选择立绘</div>
+            <select class="portrait-select" id="portraitSelect"></select>
+        </div>
+        <div class="bottom-bar-item">
+            <div class="bottom-bar-label">透明度</div>
+            <input type="range" class="edit-slider-short" id="portraitOpacity" min="0" max="100" value="90">
+        </div>
+        <div class="bottom-bar-item">
+            <button class="icon-btn" id="closeEditMode">退出</button>
+        </div>
+    </div>
+
+    <!-- 右侧信息显示 -->
+    <div class="edit-info-panel" id="editInfoPanel">
+        <div class="info-panel-item">
+            <div class="info-panel-label">位置 X</div>
+            <div class="info-panel-value" id="portraitInfoX">0px</div>
+        </div>
+        <div class="info-panel-item">
+            <div class="info-panel-label">位置 Y</div>
+            <div class="info-panel-value" id="portraitInfoY">0px</div>
+        </div>
+        <div class="info-panel-item">
+            <div class="info-panel-label">宽度</div>
+            <div class="info-panel-value" id="portraitInfoWidth">130%</div>
+        </div>
+        <div class="info-panel-item">
+            <div class="info-panel-label">高度</div>
+            <div class="info-panel-value" id="portraitInfoHeight">170%</div>
+        </div>
+    </div>
+
+    <!-- 侧边栏切换按钮 -->
+    <button class="sidebar-toggle sidebar-left-toggle" id="sidebarLeftToggle">👥</button>
+    <button class="sidebar-toggle sidebar-right-toggle" id="sidebarRightToggle">💬</button>
+
+    <!-- 左侧边栏 - 房间成员 -->
+    <div class="sidebar-left" id="sidebarLeft">
+        <div class="sidebar-content">
+            <div class="sidebar-header">
+                <div class="sidebar-title">房间成员</div>
+                <div class="sidebar-hint">点击调节音量</div>
+            </div>
+            <ul id="user-list" class="user-list">{{ member_items|safe }}</ul>
+        </div>
+    </div>
+
+    <!-- 右侧边栏 - 文字聊天 -->
+    <div class="sidebar-right" id="sidebarRight">
+        <div class="sidebar-content">
+            <div class="sidebar-header">
+                <div class="sidebar-title">文字聊天</div>
+                <div class="sidebar-hint">不影响语音</div>
+            </div>
+            <div id="chat-box" class="chat-box"></div>
+            <div class="chat-row">
+                <input id="chat-input" class="chat-input" placeholder="输入消息，回车发送">
+                <button class="chat-send" onclick="sendChat()">发送</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+
+    <div id="vol-backdrop" class="backdrop" onclick="closeVolumePanel()">
+        <div id="vol-panel" class="modal" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <div class="modal-title">音量设置</div>
+                <button class="icon-btn" onclick="closeVolumePanel()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="row" style="margin-bottom:10px">
+                    <div style="color:#cbd5e1">目标用户</div>
+                    <div id="vol-target" class="mono" style="color:#FF66A3;font-weight:900"></div>
+                </div>
+
+                <div class="section">
+                    <div class="row">
+                        <div>🎙️ 麦克风音量</div>
+                        <div id="mic-val" style="color:#FF66A3;font-weight:900">100%</div>
+                    </div>
+                    <input id="mic-slider" class="slider" type="range" min="0" max="200" value="100">
+                </div>
+
+                <div class="section">
+                    <div class="row">
+                        <div>🔊 听到TA的音量</div>
+                        <div id="play-val" style="color:#FF66A3;font-weight:900">100%</div>
+                    </div>
+                    <input id="play-slider" class="slider" type="range" min="0" max="200" value="100">
+                    <div id="play-hint" class="hint" style="margin-top:8px"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 配置变量 -->
+    <script>
+        const ROOM_CONFIG = {
+            roomId: {{ room_id }},
+            currentUser: '{{ current_user }}'
+        };
+    </script>
+    <script src="/static/js/room.js"></script>
+</body>
+</html>

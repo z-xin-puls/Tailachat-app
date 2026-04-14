@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>泰拉通讯 - 地图</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <div class="topbar">
+        <div>
+            <div class="title">🗺️ 语音地图</div>
+            <div class="user-info">欢迎，{{ current_user }}</div>
+        </div>
+        <div class="actions">
+        </div>
+    </div>
+
+    <div class="map-container" id="mapContainer">
+        <div class="map" id="map">
+            <!-- 房间将动态添加到这里 -->
+        </div>
+    </div>
+
+    <!-- 缩放控制 -->
+    <div class="zoom-controls">
+        <button class="zoom-btn" onclick="zoomIn()">+</button>
+        <div class="zoom-level" id="zoomLevel">100%</div>
+        <button class="zoom-btn" onclick="zoomOut()">−</button>
+        <button class="zoom-btn" onclick="resetZoom()">⟲</button>
+    </div>
+
+    <!-- 泰拉战术侧边栏 -->
+    <div class="tactical-sidebar sidebar-collapsed" id="tacticalSidebar">
+        <button class="sidebar-toggle" onclick="toggleSidebar()">
+            <span id="sidebarToggleIcon">⚔️</span>
+        </button>
+        <div class="sidebar-content">
+            <div class="sidebar-title">🎯 泰拉战术</div>
+            
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">快速操作</div>
+                <button class="sidebar-btn" onclick="window.location.href='/profile'">
+                    👤 个人中心
+                </button>
+                <button class="sidebar-btn" onclick="showMyOutpostsModal()">
+                    🏰 我的房间
+                </button>
+            </div>
+            
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">房间战况</div>
+                <div class="sidebar-outpost-list" id="sidebarOutpostList">
+                    <!-- 房间列表将动态添加到这里 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建房间弹窗 -->
+    <div class="modal-overlay" id="modalOverlay"></div>
+    <div class="create-modal" id="createModal">
+        <div class="modal-title">🏰 创建房间</div>
+        <form id="createForm">
+            <div class="field">
+                <label class="label">房间名称</label>
+                <input type="text" name="name" class="input" placeholder="输入房间名称" required>
+            </div>
+            <input type="hidden" name="x" id="outpostX">
+            <input type="hidden" name="y" id="outpostY">
+            <div class="modal-actions">
+                <button type="button" class="btn btn-ghost" onclick="closeCreateModal()">取消</button>
+                <button type="submit" class="btn btn-teal">创建房间</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 房间信息弹窗 -->
+    <div class="modal-overlay" id="roomInfoOverlay"></div>
+    <div class="room-info-modal" id="roomInfoModal">
+        <canvas id="modalParticleCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:0.8;"></canvas>
+        <div class="room-info-header">
+            <div class="room-info-title">🏰 据点信息</div>
+            <button class="room-info-close" onclick="closeRoomInfoModal()">&times;</button>
+        </div>
+        <div class="room-info-content">
+            <!-- 左侧可折叠侧边栏 -->
+            <div class="room-info-sidebar" id="roomInfoSidebar">
+                <button class="room-info-sidebar-toggle" onclick="toggleRoomInfoSidebar()">
+                    <span id="roomInfoSidebarIcon">◀</span>
+                </button>
+                <div class="room-info-sidebar-content">
+                    <!-- 房间信息 -->
+                    <div class="room-info-name" id="roomInfoName"></div>
+                    <div class="room-info-details" id="roomInfoDetails"></div>
+                    
+                    <!-- 创建房间表单 -->
+                    <div class="fortress-create-room" id="fortressCreateRoom">
+                        <div class="fortress-section-title">🏠 在此据点创建房间</div>
+                        <form id="fortressCreateForm">
+                            <div class="field">
+                                <label class="label">房间名称</label>
+                                <input type="text" name="name" id="fortressRoomName" required class="input">
+                            </div>
+                            <input type="hidden" name="fortress_id" id="fortressId">
+                            <input type="hidden" name="x" id="fortressX">
+                            <input type="hidden" name="y" id="fortressY">
+                            <button type="submit" class="btn btn-teal">创建房间</button>
+                        </form>
+                    </div>
+                    
+                    <!-- 据点房间列表 -->
+                    <div class="fortress-rooms" id="fortressRooms">
+                        <div class="fortress-section-title">🏠 据点房间列表</div>
+                        <div id="fortressRoomList">
+                            <!-- 房间列表将动态生成 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右侧主内容区域 -->
+            <div class="room-info-main">
+                <!-- 这里可以放置其他内容，比如地图预览等 -->
+            </div>
+        </div>
+        <div class="room-info-actions">
+            <button type="button" class="btn btn-ghost" onclick="closeRoomInfoModal()">关闭</button>
+        </div>
+    </div>
+
+    <!-- 我的房间弹窗 -->
+    <div class="modal-overlay" id="myOutpostsOverlay"></div>
+    <div class="my-outposts-modal" id="myOutpostsModal">
+        <div class="my-outposts-header">
+            <div class="my-outposts-title">🏰 我的房间</div>
+            <button class="my-outposts-close" onclick="closeMyOutpostsModal()">&times;</button>
+        </div>
+        <div class="outpost-list" id="myOutpostsList">
+            <!-- 房间列表将动态添加到这里 -->
+        </div>
+        <div class="my-outposts-actions">
+            <button type="button" class="btn btn-ghost" onclick="closeMyOutpostsModal()">关闭</button>
+        </div>
+    </div>
+
+    <!-- 数据配置变量 -->
+    <script>
+        const rooms = {{ rooms|safe }};
+        const userRooms = {{ user_rooms|safe }};
+        const fortresses = {{ fortresses|safe }};
+    </script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

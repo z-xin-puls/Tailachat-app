@@ -1,0 +1,1276 @@
+﻿from flask import Flask, render_template_string, request, redirect, session, send_from_directory
+import mysql.connector
+import sys
+import subprocess
+import os
+import requests
+import socket
+import json
+import threading
+from datetime import datetime
+import time
+
+app = Flask(__name__)
+app.secret_key = "xiao_tt_voice_123"
+
+voice_processes = {}
+
+MAX_USERNAME_LENGTH = 20
+MIN_USERNAME_LENGTH = 3
+MAX_PASSWORD_LENGTH = 32
+MIN_PASSWORD_LENGTH = 6
+MAX_ROOM_NAME_LENGTH = 30
+MIN_ROOM_NAME_LENGTH = 2
+
+def validate_username(username):
+    if not username:
+        return "用户名不能为空"
+    if len(username) < MIN_USERNAME_LENGTH:
+        return f"用户名至少需要 {MIN_USERNAME_LENGTH} 个字符"
+    if len(username) > MAX_USERNAME_LENGTH:
+        return f"用户名不能超过 {MAX_USERNAME_LENGTH} 个字符"
+    for char in username:
+        if not (char.isalnum() or char == '_' or '一' <= char <= '鿿'):
+            return "用户名只能包含字母、数字、中文和下划线"
+    return None
+
+def validate_password(password):
+    if not password:
+        return "密码不能为空"
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return f"密码至少需要 {MIN_PASSWORD_LENGTH} 个字符"
+    if len(password) > MAX_PASSWORD_LENGTH:
+        return f"密码不能超过 {MAX_PASSWORD_LENGTH} 个字符"
+    return None
+
+def validate_room_name(name):
+    if not name:
+        return "房间名称不能为空"
+    if len(name) < MIN_ROOM_NAME_LENGTH:
+        return f"房间名称至少需要 {MIN_ROOM_NAME_LENGTH} 个字符"
+    if len(name) > MAX_ROOM_NAME_LENGTH:
+        return f"房间名称不能超过 {MAX_ROOM_NAME_LENGTH} 个字符"
+    for char in name:
+        if char in '<>"\'&':
+            return "房间名称不能包含特殊字符"
+    return None
+
+DB_CONFIG = {
+    "host": "localhost",
+    "user": "root",
+    "password": "root",
+    "database": "voice_chat"
+}
+
+AVATAR_DIR = os.path.join(os.path.dirname(__file__), "uploads", "avatars")
+ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+DEFAULT_AVATAR_URL = "/static/images/avatars/avatar_1.png"
+os.makedirs(AVATAR_DIR, exist_ok=True)
+
+
+def _resolve_avatar_url(raw_value):
+    if not raw_value:
+        return DEFAULT_AVATAR_URL
+    url = str(raw_value).strip()
+    if not url:
+        return DEFAULT_AVATAR_URL
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    if url.startswith('/'):
+        return url
+    return f"/{url.lstrip('/')}"
+
+_profile_schema_inited = False
+_profile_schema_lock = threading.Lock()
+
+PROFILE_CACHE_TTL_SECONDS = 30
+_user_profile_cache = {}
+_user_profile_lock = threading.Lock()
+
+def html_escape(s):
+    if s is None:
+        return ""
+    s = str(s)
+    return (s.replace("&", "&amp;")
+             .replace("<", "&lt;")
+             .replace(">", "&gt;")
+             .replace('"', "&quot;")
+             .replace("'", "&#39;"))
+
+def ensure_user_profile_columns():
+    try:
+        db = mysql.connector.connect(**DB_CONFIG)
+        cursor = db.cursor()
+        cursor.execute("SHOW COLUMNS FROM users LIKE 'nickname'")
+        has_nickname = cursor.fetchone() is not None
+        cursor.execute("SHOW COLUMNS FROM users LIKE 'avatar'")
+        has_avatar = cursor.fetchone() is not None
+        if not has_nickname:
+            cursor.execute("ALTER TABLE users ADD COLUMN nickname VARCHAR(30) NULL DEFAULT NULL")
+        if not has_avatar:
+            cursor.execute("ALTER TABLE users ADD COLUMN avatar VARCHAR(255) NULL DEFAULT NULL")
+        db.commit()
+        db.close()
+    except:
+        try:
+            db.close()
+        except:
+            pass
+
+@app.before_request
+def _init_profile_schema():
+    global _profile_schema_inited
+    if _profile_schema_inited:
+        return
+    with _profile_schema_lock:
+        if _profile_schema_inited:
+            return
+        try:
+            ensure_user_profile_columns()
+        except:
+            pass
+        _profile_schema_inited = True
+
+def _get_user_profiles(usernames):
+    names = [u for u in set([str(x) for x in (usernames or []) if x])]
+    now = time.time()
+    out = {}
+    missing = []
+    with _user_profile_lock:
+        for u in names:
+            item = _user_profile_cache.get(u)
+            if item and (now - float(item.get("ts", 0))) < PROFILE_CACHE_TTL_SECONDS:
+                out[u] = item
+            else:
+                missing.append(u)
+
+    if missing:
+        try:
+            db = mysql.connector.connect(**DB_CONFIG)
+            cursor = db.cursor(dictionary=True)
+            placeholders = ",".join(["%s"] * len(missing))
+            cursor.execute(
+                f"SELECT username, nickname, avatar FROM users WHERE username IN ({placeholders})",
+                tuple(missing)
+            )
+            rows = cursor.fetchall() or []
+            db.close()
+            found = {r.get("username"): r for r in rows}
+            with _user_profile_lock:
+                for u in missing:
+                    r = found.get(u) or {"username": u, "nickname": None, "avatar": None}
+                    item = {"nickname": r.get("nickname"), "avatar": r.get("avatar"), "ts": now}
+                    _user_profile_cache[u] = item
+                    out[u] = item
+        except:
+            with _user_profile_lock:
+                for u in missing:
+                    item = {"nickname": None, "avatar": None, "ts": now}
+                    _user_profile_cache[u] = item
+                    out[u] = item
+
+    for u in names:
+        if u not in out:
+            out[u] = {"nickname": None, "avatar": None, "ts": now}
+    return out
+
+def _clear_user_profile_cache(username):
+    if not username:
+        return
+    with _user_profile_lock:
+        _user_profile_cache.pop(str(username), None)
+
+def _format_user_label(username, profile_item):
+    u = html_escape(username)
+    nick = html_escape((profile_item or {}).get("nickname") or "")
+    if nick and nick != username:
+        return f"<span class='user-name'>{nick}</span><span class='user-sub'>@{u}</span>"
+    return f"<span class='user-name'>{u}</span>"
+
+@app.route("/avatars/<path:filename>")
+def serve_avatar(filename):
+    return send_from_directory(AVATAR_DIR, filename)
+
+room_users = {}
+chat_rooms = {}
+chat_lock = threading.Lock()
+
+def get_chat_room(room_id):
+    with chat_lock:
+        room = chat_rooms.get(room_id)
+        if room is None:
+            room = {"next_id": 1, "messages": []}
+            chat_rooms[room_id] = room
+        return room
+
+@app.route('/api/chat/history/<room_id>')
+def chat_history(room_id):
+    if "user" not in session:
+        return {"success": False, "error": "未登录", "messages": []}
+    after = request.args.get("after")
+    try:
+        after = int(after) if after is not None else 0
+    except:
+        after = 0
+    room = get_chat_room(room_id)
+    with chat_lock:
+        msgs = [m for m in room["messages"] if m["id"] > after]
+    return {"success": True, "messages": msgs[-100:]}
+
+@app.route('/api/chat/send/<room_id>', methods=['POST'])
+def chat_send(room_id):
+    if "user" not in session:
+        return {"success": False, "error": "未登录"}
+    text = None
+    if request.is_json:
+        text = request.json.get("text")
+    if text is None:
+        text = request.form.get("text")
+    if text is None:
+        return {"success": False, "error": "参数错误"}
+    text = str(text).strip()
+    if not text:
+        return {"success": False, "error": "消息不能为空"}
+    if len(text) > 500:
+        return {"success": False, "error": "消息过长"}
+
+    room = get_chat_room(room_id)
+    prof = _get_user_profiles([session["user"]]).get(session["user"]) or {}
+    chat_user = (prof.get("nickname") or session["user"])
+    with chat_lock:
+        msg_id = room["next_id"]
+        room["next_id"] += 1
+        room["messages"].append({
+            "id": msg_id,
+            "user": chat_user,
+            "text": text,
+            "time": datetime.now().strftime("%H:%M:%S")
+        })
+        if len(room["messages"]) > 500:
+            room["messages"] = room["messages"][-500:]
+
+    return {"success": True}
+
+def allocate_local_port():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(('127.0.0.1', 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+def get_voice_entry(username):
+    entry = voice_processes.get(username)
+    if entry is None:
+        return None
+    if isinstance(entry, dict):
+        return entry
+    return {"proc": entry, "control_port": None}
+
+def terminate_voice_entry(entry):
+    if not entry:
+        return
+    proc = entry.get("proc") if isinstance(entry, dict) else entry
+    if proc is None:
+        return
+    try:
+        proc.terminate()
+    except:
+        pass
+
+def send_voice_control(username, payload):
+    entry = get_voice_entry(username)
+    if not entry or not entry.get("control_port"):
+        return False, "语音客户端未运行"
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.5)
+        s.connect(("127.0.0.1", int(entry["control_port"])))
+        msg = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
+        s.sendall(msg)
+        s.close()
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+@app.route('/api/volume/mic', methods=['POST'])
+def set_mic_volume():
+    if "user" not in session:
+        return {"success": False, "error": "未登录"}
+    gain = None
+    if request.is_json:
+        gain = request.json.get("gain")
+    if gain is None:
+        gain = request.form.get("gain") or request.args.get("gain")
+    try:
+        gain = float(gain)
+    except:
+        return {"success": False, "error": "参数错误"}
+    gain = max(0.0, min(2.0, gain))
+    ok, err = send_voice_control(session["user"], {"type": "mic", "gain": gain})
+    return {"success": ok, "error": err}
+
+@app.route('/api/volume/playback', methods=['POST'])
+def set_playback_volume():
+    if "user" not in session:
+        return {"success": False, "error": "未登录"}
+    target = None
+    gain = None
+    if request.is_json:
+        target = request.json.get("target")
+        gain = request.json.get("gain")
+    if target is None:
+        target = request.form.get("target") or request.args.get("target")
+    if gain is None:
+        gain = request.form.get("gain") or request.args.get("gain")
+    if not target:
+        return {"success": False, "error": "参数错误"}
+    try:
+        gain = float(gain)
+    except:
+        return {"success": False, "error": "参数错误"}
+    gain = max(0.0, min(2.0, gain))
+    ok, err = send_voice_control(session["user"], {"type": "playback", "target": str(target), "gain": gain})
+    return {"success": ok, "error": err}
+
+@app.route('/')
+def index():
+    if "user" not in session:
+        return redirect("/login")
+
+    prof = _get_user_profiles([session["user"]]).get(session["user"]) or {}
+    display_user = (prof.get("nickname") or session["user"])
+
+    db = mysql.connector.connect(**DB_CONFIG)
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM rooms")
+    rooms = cursor.fetchall()
+    db.close()
+
+    html = '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>小T语音 - 首页</title>
+        <style>
+            *{margin:0;padding:0;box-sizing:border-box}
+            body{background:#111827;color:#fff;font-family:Segoe UI,微软雅黑;min-height:100vh}
+            a{text-decoration:none;color:inherit}
+            .container{max-width:1100px;margin:0 auto;padding:28px}
+            .title{color:#2dd4bf;font-size:28px;letter-spacing:.5px}
+            .subtle{color:#9ca3af;font-size:13px}
+            .card{background:#1f2937;padding:22px;border-radius:16px;margin-top:18px;box-shadow:0 0 20px #0005;border:1px solid #111827}
+            .topbar{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+            .actions{display:flex;gap:10px;flex-wrap:wrap}
+            .btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:10px;border:1px solid transparent;font-weight:700;cursor:pointer;user-select:none}
+            .btn-teal{background:#2dd4bf;color:#111}
+            .btn-red{background:#ef4444;color:#fff}
+            .btn-ghost{background:transparent;color:#e5e7eb;border-color:#374151}
+            .btn:hover{filter:brightness(1.03)}
+            .rooms{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:14px}
+            .room{background:#273449;padding:16px;border-radius:14px;border:1px solid #111827}
+            .room h3{color:#2dd4bf;margin-bottom:6px;font-size:18px}
+            .room p{color:#cbd5e1;font-size:13px}
+            .room .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px}
+            .pill{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;background:#111827;border:1px solid #374151;color:#cbd5e1;font-size:12px}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="topbar">
+                <div>
+                    <div class="title">🎤 小T语音</div>
+                    <div class="subtle">欢迎回来，{{display_user}}</div>
+                </div>
+                <div class="actions">
+                    <a class="btn btn-ghost" href="/profile">个人中心</a>
+                    <a class="btn btn-teal" href="/create">创建房间</a>
+                    <a class="btn btn-red" href="/logout">退出登录</a>
+                </div>
+            </div>
+
+            <div class="card">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                    <div>
+                        <div style="font-size:18px;font-weight:800">🏠 房间列表</div>
+                        <div class="subtle" style="margin-top:4px">点击进入房间开始语音交流</div>
+                    </div>
+                    <div class="pill">共 {{rooms|length}} 个房间</div>
+                </div>
+
+                <div class="rooms">
+                    {% for r in rooms %}
+                    <div class="room">
+                        <h3>{{r[1]}}</h3>
+                        <p>房主：{{r[2]}}</p>
+                        <div class="row">
+                            <span class="pill">ID：{{r[0]}}</span>
+                            <a class="btn btn-teal" href="/room/{{r[0]}}">进入房间</a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
+    return render_template_string(html, rooms=rooms, display_user=display_user)
+
+@app.route('/login', methods=['GET','POST'])
+def login():
+    if request.method == 'POST':
+        user = request.form['user']
+        pwd = request.form['pwd']
+        error = validate_username(user)
+        if error: return f"<h3>{error}</h3>"
+        error = validate_password(pwd)
+        if error: return f"<h3>{error}</h3>"
+
+        db = mysql.connector.connect(**DB_CONFIG)
+        cursor = db.cursor()
+        cursor.execute("SELECT * FROM users WHERE username=%s AND password=%s", (user,pwd))
+        res = cursor.fetchone()
+        db.close()
+        if res:
+            session['user'] = user
+            return redirect("/")
+        else:
+            return "<h3>账号或密码错误</h3>"
+    return '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>小T语音 - 登录</title>
+        <style>
+            *{margin:0;padding:0;box-sizing:border-box}
+            body{background:#111827;color:#fff;font-family:Segoe UI,微软雅黑;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px}
+            a{text-decoration:none;color:#2dd4bf}
+            .wrap{width:100%;max-width:420px}
+            .brand{color:#2dd4bf;font-size:26px;font-weight:900;letter-spacing:.5px}
+            .sub{color:#9ca3af;margin-top:6px;font-size:13px}
+            .card{margin-top:18px;background:#1f2937;border:1px solid #111827;border-radius:16px;padding:22px;box-shadow:0 0 24px #0006}
+            .field{margin-top:12px}
+            .label{font-size:12px;color:#cbd5e1;margin-bottom:6px}
+            input{width:100%;padding:12px 14px;background:#111827;border:1px solid #374151;color:#fff;border-radius:10px;font-size:14px;outline:none}
+            input:focus{border-color:#2dd4bf;box-shadow:0 0 0 3px #2dd4bf22}
+            .row{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:16px;flex-wrap:wrap}
+            .btn{width:100%;background:#2dd4bf;color:#111;font-weight:900;border:none;padding:12px 14px;border-radius:10px;cursor:pointer}
+            .btn:hover{filter:brightness(1.03)}
+            .foot{margin-top:14px;text-align:center;color:#9ca3af;font-size:13px}
+        </style>
+    </head>
+    <body>
+        <div class="wrap">
+            <div class="brand">🎤 小T语音</div>
+            <div class="sub">登录后进入房间，点击成员可独立调音量</div>
+            <div class="card">
+                <form method="post">
+                    <div class="field">
+                        <div class="label">账号</div>
+                        <input name="user" placeholder="请输入账号" required>
+                    </div>
+                    <div class="field">
+                        <div class="label">密码</div>
+                        <input name="pwd" type="password" placeholder="请输入密码" required>
+                    </div>
+                    <div class="row">
+                        <button class="btn" type="submit">登录</button>
+                    </div>
+                </form>
+                <div class="foot">
+                    没有账号？<a href="/reg">立即注册</a>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
+
+@app.route('/reg', methods=['GET','POST'])
+def reg():
+    if request.method == 'POST':
+        user = request.form['user']
+        pwd = request.form['pwd']
+        error = validate_username(user)
+        if error: return f"<h3>{error}</h3>"
+        error = validate_password(pwd)
+        if error: return f"<h3>{error}</h3>"
+
+        try:
+            db = mysql.connector.connect(**DB_CONFIG)
+            cursor = db.cursor()
+            cursor.execute("INSERT INTO users (username,password) VALUES (%s,%s)", (user,pwd))
+            db.commit()
+            db.close()
+            return redirect("/login")
+        except mysql.connector.IntegrityError:
+            return "<h3>用户名已存在！</h3>"
+        except Exception as e:
+            return f"<h3>注册失败：{str(e)}</h3>"
+    return '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>小T语音 - 注册</title>
+        <style>
+            *{margin:0;padding:0;box-sizing:border-box}
+            body{background:#111827;color:#fff;font-family:Segoe UI,微软雅黑;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px}
+            a{text-decoration:none;color:#2dd4bf}
+            .wrap{width:100%;max-width:420px}
+            .brand{color:#2dd4bf;font-size:26px;font-weight:900;letter-spacing:.5px}
+            .sub{color:#9ca3af;margin-top:6px;font-size:13px}
+            .card{margin-top:18px;background:#1f2937;border:1px solid #111827;border-radius:16px;padding:22px;box-shadow:0 0 24px #0006}
+            .field{margin-top:12px}
+            .label{font-size:12px;color:#cbd5e1;margin-bottom:6px}
+            input{width:100%;padding:12px 14px;background:#111827;border:1px solid #374151;color:#fff;border-radius:10px;font-size:14px;outline:none}
+            input:focus{border-color:#2dd4bf;box-shadow:0 0 0 3px #2dd4bf22}
+            .btn{width:100%;margin-top:16px;background:#2dd4bf;color:#111;font-weight:900;border:none;padding:12px 14px;border-radius:10px;cursor:pointer}
+            .btn:hover{filter:brightness(1.03)}
+            .foot{margin-top:14px;text-align:center;color:#9ca3af;font-size:13px}
+        </style>
+    </head>
+    <body>
+        <div class="wrap">
+            <div class="brand">🎤 小T语音</div>
+            <div class="sub">创建账号后即可进入房间开始交流</div>
+            <div class="card">
+                <form method="post">
+                    <div class="field">
+                        <div class="label">账号</div>
+                        <input name="user" placeholder="设置账号" required>
+                    </div>
+                    <div class="field">
+                        <div class="label">密码</div>
+                        <input name="pwd" type="password" placeholder="设置密码" required>
+                    </div>
+                    <button class="btn" type="submit">注册</button>
+                </form>
+                <div class="foot">
+                    已有账号？<a href="/login">返回登录</a>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
+
+@app.route('/create', methods=['GET','POST'])
+def create():
+    if "user" not in session: return redirect("/login")
+    if request.method == 'POST':
+        name = request.form['name']
+        error = validate_room_name(name)
+        if error: return f"<h3>{error}</h3>"
+        db = mysql.connector.connect(**DB_CONFIG)
+        cursor = db.cursor()
+        cursor.execute("INSERT INTO rooms (name,owner) VALUES (%s,%s)", (name, session['user']))
+        db.commit()
+        db.close()
+        return redirect("/")
+    return '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>小T语音 - 创建房间</title>
+        <style>
+            *{margin:0;padding:0;box-sizing:border-box}
+            body{background:#111827;color:#fff;font-family:Segoe UI,微软雅黑;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px}
+            a{text-decoration:none;color:#2dd4bf}
+            .wrap{width:100%;max-width:520px}
+            .brand{color:#2dd4bf;font-size:24px;font-weight:900;letter-spacing:.5px}
+            .sub{color:#9ca3af;margin-top:6px;font-size:13px}
+            .card{margin-top:18px;background:#1f2937;border:1px solid #111827;border-radius:16px;padding:22px;box-shadow:0 0 24px #0006}
+            .field{margin-top:12px}
+            .label{font-size:12px;color:#cbd5e1;margin-bottom:6px}
+            input{width:100%;padding:12px 14px;background:#111827;border:1px solid #374151;color:#fff;border-radius:10px;font-size:14px;outline:none}
+            input:focus{border-color:#2dd4bf;box-shadow:0 0 0 3px #2dd4bf22}
+            .row{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+            .btn{flex:1;min-width:160px;background:#2dd4bf;color:#111;font-weight:900;border:none;padding:12px 14px;border-radius:10px;cursor:pointer;text-align:center}
+            .btn:hover{filter:brightness(1.03)}
+            .btn-ghost{background:transparent;color:#e5e7eb;border:1px solid #374151}
+        </style>
+    </head>
+    <body>
+        <div class="wrap">
+            <div class="brand">创建房间</div>
+            <div class="sub">输入房间名称后创建，创建完成会返回首页列表</div>
+            <div class="card">
+                <form method="post">
+                    <div class="field">
+                        <div class="label">房间名称</div>
+                        <input name="name" placeholder="输入房间名称" required>
+                    </div>
+                    <div class="row">
+                        <button class="btn" type="submit">创建</button>
+                        <a class="btn btn-ghost" href="/">返回</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
+
+@app.route('/room/<id>')
+def room(id):
+    if "user" not in session:
+        return redirect("/login")
+
+    user = session['user']
+    if id not in room_users:
+        room_users[id] = set()
+    room_users[id].add(user)
+
+    voice_users = []
+    speaking_user = None
+    try:
+        response = requests.get(f'http://127.0.0.1:5001/api/room-users/{id}', timeout=2)
+        if response.status_code == 200:
+            data = response.json()
+            voice_users = data.get('users', [])
+            speaking_user = data.get('speaking')
+    except:
+        pass
+
+    web_users = room_users.get(id, set())
+    all_users = web_users | set(voice_users)
+    count = len(all_users)
+
+    profiles = _get_user_profiles(all_users)
+    self_prof = profiles.get(user) or _get_user_profiles([user]).get(user) or {}
+    self_display = html_escape(self_prof.get("nickname") or user)
+
+    member_items = ""
+    for u in sorted(all_users):
+        safe_u = u.replace("'", "").replace('"', "")
+        label = _format_user_label(u, profiles.get(u))
+        info_link = f"<a class='user-info' href='/user/{safe_u}' onclick=\"event.stopPropagation();\">资料</a>"
+        if u == speaking_user:
+            member_items += f"<li class='user-item speaking' onclick=\"openVolumePanel('{safe_u}')\"><div class='user-main'><span class='badge badge-green'>说话</span>{label}</div><div class='user-meta'>🎤 {info_link}</div></li>"
+        elif u in voice_users:
+            member_items += f"<li class='user-item voice' onclick=\"openVolumePanel('{safe_u}')\"><div class='user-main'><span class='badge badge-teal'>语音</span>{label}</div><div class='user-meta'>✅ {info_link}</div></li>"
+        else:
+            member_items += f"<li class='user-item online' onclick=\"openVolumePanel('{safe_u}')\"><div class='user-main'><span class='badge badge-gray'>在线</span>{label}</div><div class='user-meta'>• {info_link}</div></li>"
+
+    return f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>小T语音 - 房间 {id}</title>
+        <style>
+            *{{margin:0;padding:0;box-sizing:border-box}}
+            body{{background:#111827;color:#fff;font-family:Segoe UI,微软雅黑;min-height:100vh}}
+            a{{text-decoration:none;color:inherit}}
+            .container{{max-width:1200px;margin:0 auto;padding:24px}}
+            .topbar{{display:flex;gap:14px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}}
+            .brand{{display:flex;flex-direction:column;gap:4px}}
+            .brand-title{{color:#2dd4bf;font-size:26px;font-weight:900;letter-spacing:.5px}}
+            .brand-sub{{color:#9ca3af;font-size:13px}}
+            .meta{{display:flex;gap:10px;align-items:center;flex-wrap:wrap}}
+            .pill{{display:inline-flex;gap:8px;align-items:center;padding:7px 10px;border-radius:999px;background:#1f2937;border:1px solid #111827;color:#cbd5e1;font-size:12px}}
+            .pill strong{{color:#fff}}
+            .pill-green{{border-color:#10b98155}}
+            .actions{{display:flex;gap:10px;flex-wrap:wrap}}
+            .btn{{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:10px;border:1px solid transparent;font-weight:900;cursor:pointer;user-select:none;white-space:nowrap}}
+            .btn-green{{background:#10b981;color:#fff}}
+            .btn-red{{background:#ef4444;color:#fff}}
+            .btn-ghost{{background:transparent;color:#e5e7eb;border-color:#374151}}
+            .btn:hover{{filter:brightness(1.03)}}
+            .grid{{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin-top:16px}}
+            @media (max-width: 980px){{.grid{{grid-template-columns:1fr}}}}
+            .card{{background:#1f2937;border:1px solid #111827;border-radius:16px;box-shadow:0 0 18px #0004}}
+            .card-head{{padding:16px 16px 0}}
+            .card-title{{font-size:16px;font-weight:900}}
+            .hint{{color:#9ca3af;font-size:12px;margin-top:6px}}
+            .card-body{{padding:14px 16px 16px}}
+            .chat-wrap{{margin-top:14px}}
+            .chat-box{{height:280px;overflow:auto;padding:12px;border-radius:14px;background:#111827;border:1px solid #374151}}
+            .chat-line{{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}}
+            .chat-time{{color:#6b7280;font-size:12px;min-width:70px}}
+            .chat-user{{color:#2dd4bf;font-weight:900;min-width:80px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+            .chat-text{{color:#e5e7eb;white-space:pre-wrap;word-break:break-word;flex:1}}
+            .chat-row{{display:flex;gap:10px;margin-top:10px}}
+            .chat-input{{flex:1;padding:12px 14px;background:#111827;border:1px solid #374151;color:#fff;border-radius:12px;font-size:14px;outline:none}}
+            .chat-input:focus{{border-color:#2dd4bf;box-shadow:0 0 0 3px #2dd4bf22}}
+            .chat-send{{padding:12px 16px;border-radius:12px;background:#2dd4bf;color:#111;font-weight:900;border:none;cursor:pointer}}
+            .chat-send:hover{{filter:brightness(1.03)}}
+            .user-list{{list-style:none;display:flex;flex-direction:column;gap:8px}}
+            .user-item{{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;background:#111827;border:1px solid #374151;cursor:pointer;transition:transform .08s ease, border-color .08s ease}}
+            .user-item:hover{{transform:translateY(-1px);border-color:#2dd4bf55}}
+            .user-main{{display:flex;gap:10px;align-items:center;min-width:0}}
+            .user-name{{font-weight:900;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+            .user-sub{{color:#9ca3af;font-size:12px;margin-left:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+            .user-meta{{color:#9ca3af}}
+            .user-info{{margin-left:10px;color:#93c5fd;border:1px solid #374151;padding:2px 8px;border-radius:10px;font-size:12px}}
+            .user-info:hover{{filter:brightness(1.1)}}
+            .badge{{display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:900;border:1px solid transparent}}
+            .badge-green{{background:#10b98122;color:#10b981;border-color:#10b98155}}
+            .badge-teal{{background:#2dd4bf22;color:#2dd4bf;border-color:#2dd4bf55}}
+            .badge-gray{{background:#37415155;color:#cbd5e1;border-color:#374151}}
+            .panel{{display:flex;flex-direction:column;gap:10px}}
+            .legend{{display:flex;flex-direction:column;gap:10px;margin-top:4px}}
+            .legend-item{{display:flex;gap:10px;align-items:center;color:#cbd5e1;font-size:13px}}
+            .dot{{width:10px;height:10px;border-radius:99px}}
+            .dot-green{{background:#10b981}}
+            .dot-teal{{background:#2dd4bf}}
+            .dot-gray{{background:#9ca3af}}
+            .backdrop{{display:none;position:fixed;inset:0;background:#0008;backdrop-filter:blur(4px);padding:18px;z-index:9999}}
+            .modal{{max-width:420px;margin:8vh auto 0;background:#1f2937;border:1px solid #111827;border-radius:16px;box-shadow:0 0 30px #000a;overflow:hidden}}
+            .modal-head{{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #111827}}
+            .modal-title{{color:#2dd4bf;font-weight:900}}
+            .icon-btn{{background:transparent;border:1px solid #374151;color:#e5e7eb;width:34px;height:34px;border-radius:10px;cursor:pointer;font-size:18px;line-height:0}}
+            .icon-btn:hover{{filter:brightness(1.05)}}
+            .modal-body{{padding:14px 16px 16px}}
+            .mono{{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}}
+            .row{{display:flex;align-items:center;justify-content:space-between;gap:10px}}
+            .slider{{width:100%;margin-top:8px}}
+            .section{{margin-top:14px}}
+            .section:first-child{{margin-top:0}}
+            input[type="range"]{{accent-color:#2dd4bf}}
+            .disabled{{opacity:.55;pointer-events:none}}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="topbar">
+                <div class="brand">
+                    <div class="brand-title">🎧 小T语音</div>
+                    <div class="brand-sub">点击成员可独立调节音量（不影响语音传输）</div>
+                </div>
+                <div class="meta">
+                    <div class="pill">房间 <strong class="mono">{id}</strong></div>
+                    <div class="pill">当前用户 <strong class="mono">{self_display}</strong></div>
+                    <div class="pill pill-green">在线 <strong id="user-count">{count}</strong></div>
+                </div>
+                <div class="actions">
+                    <button class="btn btn-green" onclick="startVoiceClient()">启动语音</button>
+                    <button class="btn btn-red" onclick="stopVoiceClient()">关闭语音</button>
+                    <a class="btn btn-ghost" href="/profile">个人中心</a>
+                    <a class="btn btn-ghost" href="/leave-room/{id}">退出房间</a>
+                    <a class="btn btn-ghost" href="/">返回列表</a>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <div class="card-head">
+                        <div class="card-title">房间成员</div>
+                        <div class="hint">点击用户名弹出音量调节面板（麦克风/单人播放）</div>
+                    </div>
+                    <div class="card-body">
+                        <ul id="user-list" class="user-list">{member_items}</ul>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-head">
+                        <div class="card-title">状态说明</div>
+                        <div class="hint">成员状态来自 Web 在线 + 语音连接合并显示</div>
+                    </div>
+                    <div class="card-body panel">
+                        <div class="legend">
+                            <div class="legend-item"><span class="dot dot-green"></span><span>正在说话</span></div>
+                            <div class="legend-item"><span class="dot dot-teal"></span><span>已连接语音</span></div>
+                            <div class="legend-item"><span class="dot dot-gray"></span><span>在线</span></div>
+                        </div>
+                        <div class="hint">提示：如果想调“某个人的声音”，请点击那个人；调自己发出去的声音，请在面板里调麦克风。</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card chat-wrap">
+                <div class="card-head">
+                    <div class="card-title">文字聊天</div>
+                    <div class="hint">不影响语音通话，刷新后聊天记录会清空</div>
+                </div>
+                <div class="card-body">
+                    <div id="chat-box" class="chat-box"></div>
+                    <div class="chat-row">
+                        <input id="chat-input" class="chat-input" placeholder="输入消息，回车发送">
+                        <button class="chat-send" onclick="sendChat()">发送</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="vol-backdrop" class="backdrop" onclick="closeVolumePanel()">
+            <div id="vol-panel" class="modal" onclick="event.stopPropagation()">
+                <div class="modal-head">
+                    <div class="modal-title">音量设置</div>
+                    <button class="icon-btn" onclick="closeVolumePanel()">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="row" style="margin-bottom:10px">
+                        <div style="color:#cbd5e1">目标用户</div>
+                        <div id="vol-target" class="mono" style="color:#10b981;font-weight:900"></div>
+                    </div>
+
+                    <div class="section">
+                        <div class="row">
+                            <div>🎙️ 麦克风音量</div>
+                            <div id="mic-val" style="color:#2dd4bf;font-weight:900">100%</div>
+                        </div>
+                        <input id="mic-slider" class="slider" type="range" min="0" max="200" value="100">
+                    </div>
+
+                    <div class="section">
+                        <div class="row">
+                            <div>🔊 听到TA的音量</div>
+                            <div id="play-val" style="color:#2dd4bf;font-weight:900">100%</div>
+                        </div>
+                        <input id="play-slider" class="slider" type="range" min="0" max="200" value="100">
+                        <div id="play-hint" class="hint" style="margin-top:8px"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    <script>
+        let currentTarget = '';
+        const selfUser = '{user}';
+
+        setInterval(() => {{
+            fetch('/room-data/{id}')
+            .then(r=>r.json())
+            .then(d=>{{
+                document.getElementById('user-count').innerText = d.count;
+                document.getElementById('user-list').innerHTML = d.members;
+            }});
+        }}, 3000);
+
+        function openVolumePanel(u){{
+            currentTarget = u || '';
+            document.getElementById('vol-target').innerText = currentTarget || '-';
+            document.getElementById('vol-backdrop').style.display = 'block';
+
+            const micKey = 'micGain';
+            const playKey = 'playGain:' + currentTarget;
+            const micVal = parseInt(localStorage.getItem(micKey) || '100', 10);
+            const playVal = parseInt(localStorage.getItem(playKey) || '100', 10);
+
+            const micSlider = document.getElementById('mic-slider');
+            const playSlider = document.getElementById('play-slider');
+            const playHint = document.getElementById('play-hint');
+            micSlider.value = String(isNaN(micVal) ? 100 : micVal);
+            playSlider.value = String(isNaN(playVal) ? 100 : playVal);
+            document.getElementById('mic-val').innerText = micSlider.value + '%';
+            document.getElementById('play-val').innerText = playSlider.value + '%';
+
+            if (currentTarget === selfUser) {{
+                playSlider.classList.add('disabled');
+                playSlider.disabled = true;
+                playHint.innerText = '提示：点击其他成员后可调节“听到TA的音量”。';
+            }} else {{
+                playSlider.classList.remove('disabled');
+                playSlider.disabled = false;
+                playHint.innerText = '';
+            }}
+
+            applyMicGain();
+            applyPlaybackGain();
+        }}
+
+        function closeVolumePanel(){{
+            document.getElementById('vol-backdrop').style.display = 'none';
+        }}
+
+        function applyMicGain(){{
+            const micSlider = document.getElementById('mic-slider');
+            const val = parseInt(micSlider.value, 10);
+            document.getElementById('mic-val').innerText = val + '%';
+            localStorage.setItem('micGain', String(val));
+            fetch('/api/volume/mic', {{
+                method: 'POST',
+                headers: {{ 'Content-Type': 'application/json' }},
+                body: JSON.stringify({{ gain: val / 100 }})
+            }});
+        }}
+
+        function applyPlaybackGain(){{
+            if (!currentTarget || currentTarget === selfUser) {{
+                return;
+            }}
+            const playSlider = document.getElementById('play-slider');
+            const val = parseInt(playSlider.value, 10);
+            document.getElementById('play-val').innerText = val + '%';
+            localStorage.setItem('playGain:' + currentTarget, String(val));
+            fetch('/api/volume/playback', {{
+                method: 'POST',
+                headers: {{ 'Content-Type': 'application/json' }},
+                body: JSON.stringify({{ target: currentTarget, gain: val / 100 }})
+            }});
+        }}
+
+        document.addEventListener('DOMContentLoaded', () => {{
+            document.getElementById('mic-slider').addEventListener('input', applyMicGain);
+            document.getElementById('play-slider').addEventListener('input', applyPlaybackGain);
+        }});
+
+        document.addEventListener('keydown', (e) => {{
+            if (e.key === 'Escape') {{
+                closeVolumePanel();
+            }}
+        }});
+
+        function startVoiceClient(){{
+            fetch('/start-voice/{id}').then(r=>r.json()).then(d=>{{
+                alert(d.success ? '语音启动成功！' : '失败：'+d.error);
+            }})
+        }}
+
+        function stopVoiceClient(){{
+            fetch('/stop-voice').then(r=>r.json()).then(d=>{{
+                alert(d.success ? '语音已关闭' : '失败：'+d.error);
+            }})
+        }}
+
+        let lastChatId = 0;
+
+        function appendChat(m){{
+            const box = document.getElementById('chat-box');
+            const line = document.createElement('div');
+            line.className = 'chat-line';
+            const t = document.createElement('div');
+            t.className = 'chat-time';
+            t.textContent = m.time || '';
+            const u = document.createElement('div');
+            u.className = 'chat-user';
+            u.textContent = m.user || '';
+            const text = document.createElement('div');
+            text.className = 'chat-text';
+            text.textContent = m.text || '';
+            line.appendChild(t);
+            line.appendChild(u);
+            line.appendChild(text);
+            box.appendChild(line);
+            box.scrollTop = box.scrollHeight;
+        }}
+
+        function fetchChat(){{
+            fetch('/api/chat/history/{id}?after=' + String(lastChatId))
+                .then(r => r.json())
+                .then(d => {{
+                    if (!d.success) return;
+                    const msgs = d.messages || [];
+                    for (const m of msgs) {{
+                        appendChat(m);
+                        if (m.id && m.id > lastChatId) lastChatId = m.id;
+                    }}
+                }});
+        }}
+
+        function sendChat(){{
+            const input = document.getElementById('chat-input');
+            const text = (input.value || '').trim();
+            if (!text) return;
+            fetch('/api/chat/send/{id}', {{
+                method: 'POST',
+                headers: {{ 'Content-Type': 'application/json' }},
+                body: JSON.stringify({{ text }})
+            }}).then(r => r.json()).then(d => {{
+                if (d.success) {{
+                    input.value = '';
+                    fetchChat();
+                }} else {{
+                    alert('发送失败：' + (d.error || '未知错误'));
+                }}
+            }});
+        }}
+
+        document.addEventListener('DOMContentLoaded', () => {{
+            const input = document.getElementById('chat-input');
+            input.addEventListener('keydown', (e) => {{
+                if (e.key === 'Enter') {{
+                    sendChat();
+                }}
+            }});
+            fetchChat();
+            setInterval(fetchChat, 1200);
+        }});
+    </script>
+    </body>
+    </html>
+    '''
+
+@app.route('/room-data/<id>')
+def room_data(id):
+    voice_users = []
+    speaking_user = None
+    try:
+        res = requests.get(f'http://127.0.0.1:5001/api/room-users/{id}', timeout=1)
+        if res.status_code == 200:
+            d = res.json()
+            voice_users = d.get('users', [])
+            speaking_user = d.get('speaking')
+    except:
+        pass
+
+    web_users = room_users.get(id, set())
+    all_users = web_users | set(voice_users)
+
+    profiles = _get_user_profiles(all_users)
+    members = ''
+    for u in sorted(all_users):
+        safe_u = u.replace("'", "").replace('"', "")
+        label = _format_user_label(u, profiles.get(u))
+        info_link = f"<a class='user-info' href='/user/{safe_u}' onclick=\"event.stopPropagation();\">资料</a>"
+        if u == speaking_user:
+            members += f"<li class='user-item speaking' onclick=\"openVolumePanel('{safe_u}')\"><div class='user-main'><span class='badge badge-green'>说话</span>{label}</div><div class='user-meta'>🎤 {info_link}</div></li>"
+        elif u in voice_users:
+            members += f"<li class='user-item voice' onclick=\"openVolumePanel('{safe_u}')\"><div class='user-main'><span class='badge badge-teal'>语音</span>{label}</div><div class='user-meta'>✅ {info_link}</div></li>"
+        else:
+            members += f"<li class='user-item online' onclick=\"openVolumePanel('{safe_u}')\"><div class='user-main'><span class='badge badge-gray'>在线</span>{label}</div><div class='user-meta'>• {info_link}</div></li>"
+
+    return {"count": len(all_users), "members": members}
+
+@app.route('/profile', methods=['GET','POST'])
+def profile():
+    if "user" not in session:
+        return redirect("/login")
+    username = session["user"]
+
+    if request.method == "POST":
+        nickname = request.form.get("nickname", "").strip()
+        if len(nickname) > 30:
+            return "<h3>昵称不能超过30个字符</h3>"
+
+        avatar_path = None
+        if "avatar" in request.files:
+            f = request.files["avatar"]
+            if f and f.filename:
+                _, ext = os.path.splitext(f.filename.lower())
+                if ext in ALLOWED_IMAGE_EXTS:
+                    ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
+                    safe_user = "".join([c for c in username if c.isalnum() or c in ("_", "-")])[:30] or "u"
+                    filename = f"u_{safe_user}_{ts}{ext}"
+                    save_path = os.path.join(AVATAR_DIR, filename)
+                    f.save(save_path)
+                    avatar_path = f"/avatars/{filename}"
+
+        db = mysql.connector.connect(**DB_CONFIG)
+        cursor = db.cursor()
+        if nickname:
+            cursor.execute("UPDATE users SET nickname=%s WHERE username=%s", (nickname, username))
+        if avatar_path:
+            cursor.execute("UPDATE users SET avatar=%s WHERE username=%s", (avatar_path, username))
+        db.commit()
+        db.close()
+        _clear_user_profile_cache(username)
+
+    db = mysql.connector.connect(**DB_CONFIG)
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT username, nickname, avatar FROM users WHERE username=%s", (username,))
+    me = cursor.fetchone()
+    db.close()
+    nick = (me.get("nickname") or "").strip() if me else ""
+    avatar = (me.get("avatar") or "").strip() if me else ""
+    display = nick if nick else username
+
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>个人中心</title>
+        <style>
+            *{{margin:0;padding:0;box-sizing:border-box}}
+            body{{background:#111827;color:#fff;font-family:Segoe UI,微软雅黑;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px}}
+            a{{text-decoration:none;color:#93c5fd}}
+            .wrap{{width:100%;max-width:680px}}
+            .card{{background:#1f2937;border:1px solid #111827;border-radius:16px;box-shadow:0 0 24px #0006;padding:22px}}
+            .title{{color:#2dd4bf;font-size:22px;font-weight:900}}
+            .row{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:14px}}
+            .avatar{{width:96px;height:96px;border-radius:999px;border:2px solid #374151;display:flex;align-items:center;justify-content:center;background:#0b1220;overflow:hidden}}
+            .avatar img{{width:100%;height:100%;object-fit:cover}}
+            .avatar-fallback{{font-size:28px;color:#93c5fd;font-weight:900}}
+            .field{{margin-top:12px}}
+            .label{{font-size:12px;color:#cbd5e1;margin-bottom:6px}}
+            input[type="text"]{{width:100%;padding:12px 14px;background:#111827;border:1px solid #374151;color:#fff;border-radius:10px;font-size:14px;outline:none}}
+            input[type="text"]:focus{{border-color:#2dd4bf;box-shadow:0 0 0 3px #2dd4bf22}}
+            input[type="file"]{{color:#cbd5e1}}
+            .actions{{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}}
+            .btn{{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:10px;border:1px solid transparent;font-weight:900;cursor:pointer}}
+            .btn-teal{{background:#2dd4bf;color:#111}}
+            .btn-ghost{{background:transparent;color:#e5e7eb;border-color:#374151}}
+            .hint{{color:#9ca3af;font-size:12px;margin-top:4px}}
+        </style>
+    </head>
+    <body>
+        <div class="wrap">
+            <div class="card">
+                <div class="title">个人中心</div>
+                <div class="row" style="margin-top:12px">
+                    <div class="avatar">{
+                        f"<img src='{avatar}' alt='avatar'>" if avatar else f"<div class='avatar-fallback'>{html_escape(display)[:1].upper()}</div>"
+                    }</div>
+                    <div>
+                        <div>昵称：{html_escape(display)}</div>
+                        <div class="hint" style="margin-top:6px">账号：{html_escape(username)}</div>
+                        <div class="hint" style="margin-top:6px">上传支持：png/jpg/jpeg/gif/webp</div>
+                    </div>
+                </div>
+
+                <form method="post" enctype="multipart/form-data" style="margin-top:12px">
+                    <div class="field">
+                        <div class="label">修改昵称</div>
+                        <input type="text" name="nickname" value="{html_escape(nick)}" placeholder="设置昵称（最多30字符）">
+                    </div>
+                    <div class="field">
+                        <div class="label">上传头像</div>
+                        <input type="file" name="avatar" accept=".png,.jpg,.jpeg,.gif,.webp">
+                    </div>
+                    <div class="actions">
+                        <button class="btn btn-teal" type="submit">保存</button>
+                        <a class="btn btn-ghost" href="/">返回首页</a>
+                        <a class="btn btn-ghost" href="/logout">退出登录</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
+    return html
+
+@app.route('/user/<username>')
+def user_public(username):
+    db = mysql.connector.connect(**DB_CONFIG)
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT username, nickname, avatar FROM users WHERE username=%s", (username,))
+    info = cursor.fetchone()
+    rooms = []
+    try:
+        cursor2 = db.cursor()
+        cursor2.execute("SELECT id,name FROM rooms WHERE owner=%s", (username,))
+        rooms = cursor2.fetchall()
+    except:
+        pass
+    db.close()
+    if not info:
+        return "<h3>用户不存在</h3>"
+
+    nick = (info.get("nickname") or "").strip()
+    avatar = (info.get("avatar") or "").strip()
+    display = nick if nick else info["username"]
+    room_items = "".join([f"<li><a href='/room/{r[0]}'>{html_escape(r[1])}（ID {r[0]}）</a></li>" for r in rooms]) or "<li>暂无房间</li>"
+
+    html = f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>用户资料 - {html_escape(info["username"])}</title>
+        <style>
+            *{{margin:0;padding:0;box-sizing:border-box}}
+            body{{background:#111827;color:#fff;font-family:Segoe UI,微软雅黑;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px}}
+            a{{color:#93c5fd;text-decoration:none}}
+            .wrap{{width:100%;max-width:680px}}
+            .card{{background:#1f2937;border:1px solid #111827;border-radius:16px;box-shadow:0 0 24px #0006;padding:22px}}
+            .title{{color:#2dd4bf;font-size:22px;font-weight:900}}
+            .row{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:14px}}
+            .avatar{{width:96px;height:96px;border-radius:999px;border:2px solid #374151;display:flex;align-items:center;justify-content:center;background:#0b1220;overflow:hidden}}
+            .avatar img{{width:100%;height:100%;object-fit:cover}}
+            .avatar-fallback{{font-size:28px;color:#93c5fd;font-weight:900}}
+            .sub{{color:#9ca3af;margin-top:6px}}
+            ul{{margin-top:10px;padding-left:18px}}
+        </style>
+    </head>
+    <body>
+        <div class="wrap">
+            <div class="card">
+                <div class="title">用户资料</div>
+                <div class="row" style="margin-top:12px">
+                    <div class="avatar">{
+                        f"<img src='{avatar}' alt='avatar'>" if avatar else f"<div class='avatar-fallback'>{html_escape(display)[:1].upper()}</div>"
+                    }</div>
+                    <div>
+                        <div>昵称：{html_escape(display)}</div>
+                        <div class="sub">账号：{html_escape(info["username"])}</div>
+                    </div>
+                </div>
+                <div style="margin-top:14px" class="title">TA 的房间</div>
+                <ul>{room_items}</ul>
+                <div style="margin-top:16px">
+                    <a href="javascript:history.back()">返回</a> · <a href="/">首页</a>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
+    return html
+
+@app.route('/start-voice/<room_id>')
+def start_voice(room_id):
+    if "user" not in session:
+        return {"success": False, "error": "未登录"}
+
+    username = session['user']
+    client_path = os.path.join(os.path.dirname(__file__), 'client.py')
+
+    try:
+        existing = get_voice_entry(username)
+        terminate_voice_entry(existing)
+
+        control_port = allocate_local_port()
+
+        if os.name == 'nt':
+            proc = subprocess.Popen([sys.executable, client_path, username, room_id, str(control_port)], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        else:
+            proc = subprocess.Popen([sys.executable, client_path, username, room_id, str(control_port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        voice_processes[username] = {"proc": proc, "control_port": control_port}
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/stop-voice')
+def stop_voice():
+    if "user" not in session:
+        return {"success": False, "error": "未登录"}
+    user = session['user']
+    if user in voice_processes:
+        try:
+            terminate_voice_entry(get_voice_entry(user))
+            del voice_processes[user]
+            return {"success": True}
+        except:
+            return {"success": False, "error": "关闭失败"}
+    return {"success": False, "error": "未运行"}
+
+@app.route('/leave-room/<room_id>')
+def leave_room(room_id):
+    if "user" not in session: return redirect("/login")
+    user = session["user"]
+    if room_id in room_users:
+        room_users[room_id].discard(user)
+    try:
+        stop_voice()
+    except:
+        pass
+    return redirect("/")
+
+@app.route('/logout')
+def logout():
+    user = session.get("user")
+    for r in room_users:
+        if user in room_users[r]:
+            room_users[r].discard(user)
+    try:
+        stop_voice()
+    except:
+        pass
+    session.clear()
+    return redirect("/login")
+
+if __name__ == '__main__':
+    import logging
+    # 配置日志级别，只输出警告及以上级别的信息
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.WARNING)
+    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)

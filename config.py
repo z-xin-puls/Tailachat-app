@@ -1,13 +1,17 @@
 # 配置文件
 import os
 
-# 数据库配置
+# 数据库配置 - 支持环境变量（Railway + Aiven）
 DB_CONFIG = {
-    "host": "localhost",
-    "user": "root", 
-    "password": "root",
-    "database": "voice_chat"
+    "host": os.getenv("DB_HOST", "localhost"),
+    "user": os.getenv("DB_USER", "root"),
+    "password": os.getenv("DB_PASSWORD", "root"),
+    "database": os.getenv("DB_NAME", "voice_chat"),
+    "port": int(os.getenv("DB_PORT", "3306"))
 }
+
+# PostgreSQL 连接字符串（用于 psycopg2）
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Flask配置
 SECRET_KEY = "xiao_tt_voice_123"

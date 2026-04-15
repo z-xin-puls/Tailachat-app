@@ -1,4 +1,7 @@
 # 小T语音应用 - 重构版本
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template, request, redirect, session, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import mysql.connector

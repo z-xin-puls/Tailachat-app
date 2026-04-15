@@ -7,6 +7,7 @@ from utils.validators import validate_room_name
 from utils.helpers import html_escape
 import json
 import requests
+import os
 
 #  Alias for consistency with other code
 get_db = get_db_connection
@@ -17,8 +18,10 @@ def get_real_online_count(room_id):
     """Get real online user count by calling app.py's API endpoint"""
     try:
         print(f"DEBUG: Getting online count for room {room_id}")
+        # 使用Railway的PORT环境变量，而不是硬编码5000
+        port = os.getenv("PORT", "5000")
         #  Call app.py's room_data endpoint via HTTP
-        res = requests.get(f'http://127.0.0.1:5000/room-data/{room_id}', timeout=2)
+        res = requests.get(f'http://127.0.0.1:{port}/room-data/{room_id}', timeout=2)
         print(f"DEBUG: API response status: {res.status_code}")
         if res.status_code == 200:
             result = res.json()

@@ -7,7 +7,6 @@ from utils.validators import validate_room_name
 from utils.helpers import html_escape
 import json
 import requests
-import os
 
 #  Alias for consistency with other code
 get_db = get_db_connection
@@ -15,9 +14,26 @@ get_db = get_db_connection
 main_bp = Blueprint('main', __name__)
 
 def get_real_online_count(room_id):
-    """直接返回模拟的在线人数，避免HTTP请求导致的超时问题"""
-    import random
-    return random.randint(1, 10)
+    """Get real online user count by calling app.py's API endpoint"""
+    try:
+        print(f"DEBUG: Getting online count for room {room_id}")
+        #  Call app.py's room_data endpoint via HTTP
+        res = requests.get(f'http://127.0.0.1:5000/room-data/{room_id}', timeout=2)
+        print(f"DEBUG: API response status: {res.status_code}")
+        if res.status_code == 200:
+            result = res.json()
+            print(f"DEBUG: API response data: {result}")
+            count = result.get('count', 0)
+            print(f"DEBUG: Extracted count for room {room_id}: {count}")
+            return count
+        else:
+            print(f"DEBUG: API response text: {res.text}")
+            return 0
+    except Exception as e:
+        print(f"DEBUG: Exception in get_real_online_count: {e}")
+        import traceback
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
+        return 0
 
 @main_bp.route('/')
 def index():

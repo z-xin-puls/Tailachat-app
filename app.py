@@ -74,9 +74,7 @@ def room(id):
     voice_users = []
     speaking_user = None
     try:
-        # 使用环境变量配置语音服务器地址，支持Railway部署
-        voice_server_url = os.getenv("VOICE_SERVER_URL", "http://127.0.0.1:5001")
-        response = requests.get(f'{voice_server_url}/api/room-users/{id}', timeout=2)
+        response = requests.get(f'http://127.0.0.1:5001/api/room-users/{id}', timeout=2)
         if response.status_code == 200:
             data = response.json()
             voice_users = data.get('users', [])
@@ -305,9 +303,7 @@ def room_data(id):
     voice_users = []
     speaking_user = None
     try:
-        # 使用环境变量配置语音服务器地址，支持Railway部署
-        voice_server_url = os.getenv("VOICE_SERVER_URL", "http://127.0.0.1:5001")
-        res = requests.get(f'{voice_server_url}/api/room-users/{id}', timeout=1)
+        res = requests.get(f'http://127.0.0.1:5001/api/room-users/{id}', timeout=1)
         if res.status_code == 200:
             d = res.json()
             voice_users = d.get('users', [])

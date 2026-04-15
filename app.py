@@ -1,5 +1,6 @@
 # 小T语音应用 - 重构版本
 from flask import Flask, render_template, request, redirect, session, send_from_directory
+from flask_socketio import SocketIO, emit, join_room, leave_room
 import mysql.connector
 import sys
 import subprocess
@@ -34,11 +35,76 @@ from routes.profile import profile_bp
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
+# 初始化SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*")
+
 # 全局变量
 voice_processes = {}
 room_users = {}
 chat_rooms = {}
 chat_lock = threading.Lock()
+
+# ======================
+# 语音用户状态管理（集成自server.py）
+# ======================
+voice_room_clients = {}  # {room_id: [client1, client2, ...]}
+voice_room_lock = threading.Lock()
+voice_client_info = {}  # {conn: {'username': 'xxx', 'room_id': 'xxx'}}
+voice_speaking_users = {}  # {room_id: {'username': 'xxx', 'last_speak_time': timestamp}}
+voice_speaking_lock = threading.Lock()
+
+# ======================
+# WebSocket聊天功能
+# ======================
+@socketio.on('connect')
+def handle_connect():
+    print(f"Client connected: {request.sid}")
+
+@socketio.on('join')
+def handle_join(data):
+    """用户加入聊天房间"""
+    room_id = data.get('room_id')
+    username = data.get('username')
+    if room_id and username:
+        join_room(room_id)
+        with chat_lock:
+            if room_id not in chat_rooms:
+                chat_rooms[room_id] = []
+            chat_rooms[room_id].append(username)
+        emit('message', {
+            'user': '系统',
+            'message': f'{username} 加入了房间',
+            'time': datetime.now().strftime('%H:%M:%S')
+        }, room=room_id)
+
+@socketio.on('leave')
+def handle_leave(data):
+    """用户离开聊天房间"""
+    room_id = data.get('room_id')
+    username = data.get('username')
+    if room_id and username:
+        leave_room(room_id)
+        with chat_lock:
+            if room_id in chat_rooms and username in chat_rooms[room_id]:
+                chat_rooms[room_id].remove(username)
+        emit('message', {
+            'user': '系统',
+            'message': f'{username} 离开了房间',
+            'time': datetime.now().strftime('%H:%M:%S')
+        }, room=room_id)
+
+@socketio.on('chat_message')
+def handle_chat_message(data):
+    """处理聊天消息"""
+    room_id = data.get('room_id')
+    username = data.get('username')
+    message = data.get('message')
+    if room_id and username and message:
+        emit('message', {
+            'user': username,
+            'message': message,
+            'time': datetime.now().strftime('%H:%M:%S')
+        }, room=room_id)
 
 # 注册蓝图
 app.register_blueprint(auth_bp)
@@ -73,9 +139,11 @@ def room(id):
 
     voice_users = []
     speaking_user = None
-    # 暂时禁用语音功能，避免HTTP调用连接错误
     try:
-        pass  # 移除HTTP调用
+        # 直接调用本地API端点，避免HTTP请求
+        response = get_voice_room_users(id)
+        voice_users = response.get_json().get('users', [])
+        speaking_user = response.get_json().get('speaking')
     except:
         pass
 
@@ -299,9 +367,11 @@ def leave_room(room_id):
 def room_data(id):
     voice_users = []
     speaking_user = None
-    # 暂时禁用语音功能，避免HTTP调用连接错误
     try:
-        pass  # 移除HTTP调用
+        # 直接调用本地API端点，避免HTTP请求
+        response = get_voice_room_users(id)
+        voice_users = response.get_json().get('users', [])
+        speaking_user = response.get_json().get('speaking')
     except:
         pass
 
@@ -322,6 +392,47 @@ def room_data(id):
             members += f"<li class='user-item online' onclick=\"openVolumePanel('{safe_u}')\"><div class='user-main'><span class='badge badge-gray'>在线</span>{label}</div><div class='user-meta'>• {info_link}</div></li>"
 
     return {"count": len(all_users), "members": members}
+
+# ======================
+# 语音API端点（集成自server.py）
+# ======================
+@app.route('/api/room-users/<room_id>')
+def get_voice_room_users(room_id):
+    """获取指定语音房间的在线用户列表"""
+    with voice_room_lock:
+        if room_id not in voice_room_clients:
+            return jsonify({"users": [], "speaking": None})
+
+        users = []
+        for conn in voice_room_clients[room_id]:
+            if conn in voice_client_info:
+                users.append(voice_client_info[conn]['username'])
+
+    # 获取正在说话的用户
+    speaking_user = None
+    with voice_speaking_lock:
+        if room_id in voice_speaking_users:
+            # 检查是否在最近2秒内说话
+            if time.time() - voice_speaking_users[room_id]['last_speak_time'] < 2.0:
+                speaking_user = voice_speaking_users[room_id]['username']
+            else:
+                # 超过2秒，清除正在说话状态
+                del voice_speaking_users[room_id]
+
+    return jsonify({"users": users, "speaking": speaking_user})
+
+@app.route('/api/all-rooms')
+def get_all_voice_rooms():
+    """获取所有语音房间及其在线用户"""
+    with voice_room_lock:
+        rooms = {}
+        for room_id, clients in voice_room_clients.items():
+            rooms[room_id] = []
+            for conn in clients:
+                if conn in voice_client_info:
+                    rooms[room_id].append(voice_client_info[conn]['username'])
+
+        return jsonify(rooms)
 
 # 传统创建房间路由（保留兼容性）
 @app.route('/create', methods=['GET','POST'])
@@ -387,4 +498,5 @@ if __name__ == '__main__':
     # 配置日志级别，只输出警告及以上级别的信息
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.WARNING)
-    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+    # 使用socketio.run()支持WebSocket
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False)

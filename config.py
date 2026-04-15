@@ -39,5 +39,11 @@ DEFAULT_AVATARS = [
 # 缓存配置
 PROFILE_CACHE_TTL_SECONDS = 30
 
+# 服务URL配置 - 支持环境变量
+# 在Railway中需要设置这些环境变量
+WEB_APP_URL = os.getenv("WEB_APP_URL", "http://127.0.0.1:5000")
+VOICE_SERVER_URL = os.getenv("VOICE_SERVER_URL", "http://127.0.0.1:5001")
+CHAT_SERVER_URL = os.getenv("CHAT_SERVER_URL", "http://127.0.0.1:8888")
+
 # 创建头像目录
 os.makedirs(AVATAR_DIR, exist_ok=True)

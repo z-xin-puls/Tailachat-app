@@ -1,15 +1,8 @@
 # 数据库初始化脚本 - 自动创建表结构
-import os
 from models.database import get_db_connection
 
 def init_database():
     """初始化数据库表结构"""
-    # 调试：打印环境变量
-    print(f"DEBUG: MYSQLHOST={os.getenv('MYSQLHOST')}")
-    print(f"DEBUG: MYSQLUSER={os.getenv('MYSQLUSER')}")
-    print(f"DEBUG: MYSQLDATABASE={os.getenv('MYSQLDATABASE')}")
-    print(f"DEBUG: MYSQLPORT={os.getenv('MYSQLPORT')}")
-    
     try:
         db = get_db_connection()
         cursor = db.cursor()

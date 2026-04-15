@@ -19,6 +19,9 @@ from models.database import get_db_connection, ensure_user_profile_columns, ensu
 from models.user import get_user_profiles, clear_user_profile_cache, resolve_avatar_url, format_user_label
 from models.room import get_room_by_id, create_room
 
+# 导入数据库初始化
+from init_db import init_database
+
 # 导入验证函数
 from utils.validators import validate_room_name
 
@@ -41,6 +44,9 @@ chat_lock = threading.Lock()
 app.register_blueprint(auth_bp)
 app.register_blueprint(main_bp)
 app.register_blueprint(profile_bp)
+
+# 初始化数据库表结构
+init_database()
 
 # 初始化数据库结构
 @app.before_request

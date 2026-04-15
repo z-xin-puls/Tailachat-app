@@ -12,7 +12,7 @@ from datetime import datetime
 import time
 
 # 导入配置
-from config import SECRET_KEY, DB_CONFIG, PROFILE_CACHE_TTL_SECONDS, VOICE_SERVER_URL, WEB_APP_URL
+from config import SECRET_KEY, DB_CONFIG, PROFILE_CACHE_TTL_SECONDS
 
 # 导入数据模型
 from models.database import get_db_connection, ensure_user_profile_columns, ensure_room_location_columns
@@ -74,7 +74,7 @@ def room(id):
     voice_users = []
     speaking_user = None
     try:
-        response = requests.get(f'{VOICE_SERVER_URL}/api/room-users/{id}', timeout=2)
+        response = requests.get(f'http://127.0.0.1:5001/api/room-users/{id}', timeout=2)
         if response.status_code == 200:
             data = response.json()
             voice_users = data.get('users', [])
@@ -303,7 +303,7 @@ def room_data(id):
     voice_users = []
     speaking_user = None
     try:
-        res = requests.get(f'{VOICE_SERVER_URL}/api/room-users/{id}', timeout=1)
+        res = requests.get(f'http://127.0.0.1:5001/api/room-users/{id}', timeout=1)
         if res.status_code == 200:
             d = res.json()
             voice_users = d.get('users', [])

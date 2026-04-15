@@ -234,8 +234,7 @@ def run_api():
     # 配置日志级别，只输出警告及以上级别的信息
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.WARNING)
-    # 绑定到0.0.0.0以便在Railway中可访问
-    api_app.run(host='0.0.0.0', port=5001, debug=False)
+    api_app.run(host='127.0.0.1', port=5001, debug=False)
 
 api_thread = threading.Thread(target=run_api, daemon=True)
 api_thread.start()

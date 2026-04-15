@@ -45,10 +45,16 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(main_bp)
 app.register_blueprint(profile_bp)
 
-# 初始化数据库表结构
-init_database()
-
 # 初始化数据库结构
+_db_initialized = False
+
+@app.before_request
+def _init_database():
+    global _db_initialized
+    if not _db_initialized:
+        init_database()
+        _db_initialized = True
+
 @app.before_request
 def _init_profile_schema():
     ensure_user_profile_columns()

@@ -1,6 +1,5 @@
 Flask
 Flask-SocketIO
-psycopg2-binary
 python-engineio
 python-socketio
 requests

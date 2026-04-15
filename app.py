@@ -73,12 +73,9 @@ def room(id):
 
     voice_users = []
     speaking_user = None
+    # 暂时禁用语音功能，避免HTTP调用连接错误
     try:
-        response = requests.get(f'http://127.0.0.1:5001/api/room-users/{id}', timeout=2)
-        if response.status_code == 200:
-            data = response.json()
-            voice_users = data.get('users', [])
-            speaking_user = data.get('speaking')
+        pass  # 移除HTTP调用
     except:
         pass
 
@@ -302,12 +299,9 @@ def leave_room(room_id):
 def room_data(id):
     voice_users = []
     speaking_user = None
+    # 暂时禁用语音功能，避免HTTP调用连接错误
     try:
-        res = requests.get(f'http://127.0.0.1:5001/api/room-users/{id}', timeout=1)
-        if res.status_code == 200:
-            d = res.json()
-            voice_users = d.get('users', [])
-            speaking_user = d.get('speaking')
+        pass  # 移除HTTP调用
     except:
         pass
 

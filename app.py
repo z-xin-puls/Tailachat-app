@@ -45,15 +45,6 @@ chat_rooms = {}
 chat_lock = threading.Lock()
 
 # ======================
-# 语音用户状态管理（集成自server.py）
-# ======================
-voice_room_clients = {}  # {room_id: [client1, client2, ...]}
-voice_room_lock = threading.Lock()
-voice_client_info = {}  # {conn: {'username': 'xxx', 'room_id': 'xxx'}}
-voice_speaking_users = {}  # {room_id: {'username': 'xxx', 'last_speak_time': timestamp}}
-voice_speaking_lock = threading.Lock()
-
-# ======================
 # WebSocket聊天功能
 # ======================
 @socketio.on('connect')
@@ -106,6 +97,46 @@ def handle_chat_message(data):
             'time': datetime.now().strftime('%H:%M:%S')
         }, room=room_id)
 
+# ======================
+# WebSocket语音传输功能
+# ======================
+@socketio.on('voice_join')
+def handle_voice_join(data):
+    """用户加入语音房间"""
+    room_id = data.get('room_id')
+    username = data.get('username')
+    if room_id and username:
+        join_room(f'voice_{room_id}')
+        emit('voice_event', {
+            'type': 'user_joined',
+            'username': username
+        }, room=f'voice_{room_id}')
+
+@socketio.on('voice_leave')
+def handle_voice_leave(data):
+    """用户离开语音房间"""
+    room_id = data.get('room_id')
+    username = data.get('username')
+    if room_id and username:
+        leave_room(f'voice_{room_id}')
+        emit('voice_event', {
+            'type': 'user_left',
+            'username': username
+        }, room=f'voice_{room_id}')
+
+@socketio.on('voice_data')
+def handle_voice_data(data):
+    """处理语音数据"""
+    room_id = data.get('room_id')
+    audio_data = data.get('audio')
+    username = data.get('username')
+    if room_id and audio_data:
+        # 广播语音数据给房间内其他用户
+        emit('voice_data', {
+            'audio': audio_data,
+            'username': username
+        }, room=f'voice_{room_id}', skip_sid=request.sid)
+
 # 注册蓝图
 app.register_blueprint(auth_bp)
 app.register_blueprint(main_bp)
@@ -139,11 +170,9 @@ def room(id):
 
     voice_users = []
     speaking_user = None
+    # 语音功能已集成为WebSocket，不需要HTTP调用
     try:
-        # 直接调用本地API端点，避免HTTP请求
-        response = get_voice_room_users(id)
-        voice_users = response.get_json().get('users', [])
-        speaking_user = response.get_json().get('speaking')
+        pass
     except:
         pass
 
@@ -367,11 +396,9 @@ def leave_room(room_id):
 def room_data(id):
     voice_users = []
     speaking_user = None
+    # 语音功能已集成为WebSocket，不需要HTTP调用
     try:
-        # 直接调用本地API端点，避免HTTP请求
-        response = get_voice_room_users(id)
-        voice_users = response.get_json().get('users', [])
-        speaking_user = response.get_json().get('speaking')
+        pass
     except:
         pass
 
@@ -392,47 +419,6 @@ def room_data(id):
             members += f"<li class='user-item online' onclick=\"openVolumePanel('{safe_u}')\"><div class='user-main'><span class='badge badge-gray'>在线</span>{label}</div><div class='user-meta'>• {info_link}</div></li>"
 
     return {"count": len(all_users), "members": members}
-
-# ======================
-# 语音API端点（集成自server.py）
-# ======================
-@app.route('/api/room-users/<room_id>')
-def get_voice_room_users(room_id):
-    """获取指定语音房间的在线用户列表"""
-    with voice_room_lock:
-        if room_id not in voice_room_clients:
-            return jsonify({"users": [], "speaking": None})
-
-        users = []
-        for conn in voice_room_clients[room_id]:
-            if conn in voice_client_info:
-                users.append(voice_client_info[conn]['username'])
-
-    # 获取正在说话的用户
-    speaking_user = None
-    with voice_speaking_lock:
-        if room_id in voice_speaking_users:
-            # 检查是否在最近2秒内说话
-            if time.time() - voice_speaking_users[room_id]['last_speak_time'] < 2.0:
-                speaking_user = voice_speaking_users[room_id]['username']
-            else:
-                # 超过2秒，清除正在说话状态
-                del voice_speaking_users[room_id]
-
-    return jsonify({"users": users, "speaking": speaking_user})
-
-@app.route('/api/all-rooms')
-def get_all_voice_rooms():
-    """获取所有语音房间及其在线用户"""
-    with voice_room_lock:
-        rooms = {}
-        for room_id, clients in voice_room_clients.items():
-            rooms[room_id] = []
-            for conn in clients:
-                if conn in voice_client_info:
-                    rooms[room_id].append(voice_client_info[conn]['username'])
-
-        return jsonify(rooms)
 
 # 传统创建房间路由（保留兼容性）
 @app.route('/create', methods=['GET','POST'])

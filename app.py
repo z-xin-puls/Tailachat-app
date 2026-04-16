@@ -1,5 +1,6 @@
 # 小T语音应用 - 重构版本
 from flask import Flask, render_template, request, redirect, session, send_from_directory
+from flask_socketio import SocketIO, emit, join_room, leave_room
 import mysql.connector
 import sys
 import subprocess
@@ -33,6 +34,9 @@ from routes.profile import profile_bp
 # 创建Flask应用
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
+
+# 初始化SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # 全局变量
 voice_processes = {}
@@ -388,9 +392,209 @@ def create():
     </html>
     '''
 
+# ======================
+# SocketIO事件处理器 - WebRTC信令
+# ======================
+
+# 存储房间内的用户信息
+socket_room_users = {}  # {room_id: {sid: username}}
+
+# 存储用户名到sid的映射 {room_id: {username: sid}}
+username_to_sid = {}
+
+@socketio.on('connect')
+def handle_connect():
+    pass  # 移除连接日志
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    # 清理房间信息
+    for room_id in socket_room_users:
+        if request.sid in socket_room_users[room_id]:
+            username = socket_room_users[room_id][request.sid]
+            del socket_room_users[room_id][request.sid]
+            if room_id in username_to_sid and username in username_to_sid[room_id]:
+                del username_to_sid[room_id][username]
+            # 通知房间内其他用户
+            emit('user_left', {'username': username}, room=room_id, skip_sid=request.sid)
+
+@socketio.on('join_voice_room')
+def handle_join_voice_room(data):
+    room_id = data.get('room_id')
+    username = data.get('username')
+
+    if not room_id or not username:
+        return
+
+    # 加入SocketIO房间
+    join_room(room_id)
+
+    # 记录用户信息
+    if room_id not in socket_room_users:
+        socket_room_users[room_id] = {}
+    if room_id not in username_to_sid:
+        username_to_sid[room_id] = {}
+
+    socket_room_users[room_id][request.sid] = username
+    username_to_sid[room_id][username] = request.sid
+
+    # 获取房间内现有用户
+    existing_users = [u for sid, u in socket_room_users[room_id].items() if sid != request.sid]
+
+    # 通知房间内其他用户有新用户加入
+    emit('user_joined', {'username': username}, room=room_id, skip_sid=request.sid)
+
+    # 发送现有用户列表给新用户
+    emit('room_users', {'users': existing_users})
+
+    print(f'用户 {username} 加入语音房间 {room_id}')
+
+@socketio.on('leave_voice_room')
+def handle_leave_voice_room(data):
+    room_id = data.get('room_id')
+    username = data.get('username')
+
+    if room_id and username:
+        # 清理房间信息
+        if room_id in socket_room_users and request.sid in socket_room_users[room_id]:
+            del socket_room_users[room_id][request.sid]
+        if room_id in username_to_sid and username in username_to_sid[room_id]:
+            del username_to_sid[room_id][username]
+
+        # 离开SocketIO房间
+        leave_room(room_id)
+
+        # 通知房间内其他用户
+        emit('user_left', {'username': username}, room=room_id)
+
+        print(f'用户 {username} 离开语音房间 {room_id}')
+
+@socketio.on('webrtc_offer')
+def handle_webrtc_offer(data):
+    target_username = data.get('target')
+    offer = data.get('sdp')
+    sender = data.get('sender')
+
+    if target_username and offer and sender:
+        # 通过用户名找到对应的sid
+        target_sid = None
+        for users in username_to_sid.values():
+            if target_username in users:
+                target_sid = users[target_username]
+                break
+
+        if target_sid:
+            # 使用sid发送消息给特定用户
+            emit('webrtc_offer', {'sdp': offer, 'sender': sender}, to=target_sid)
+        else:
+            print(f'警告: 找不到用户 {target_username} 的sid')
+
+@socketio.on('webrtc_answer')
+def handle_webrtc_answer(data):
+    target_username = data.get('target')
+    answer = data.get('sdp')
+    sender = data.get('sender')
+
+    if target_username and answer and sender:
+        # 通过用户名找到对应的sid
+        target_sid = None
+        for users in username_to_sid.values():
+            if target_username in users:
+                target_sid = users[target_username]
+                break
+
+        if target_sid:
+            emit('webrtc_answer', {'sdp': answer, 'sender': sender}, to=target_sid)
+        else:
+            print(f'警告: 找不到用户 {target_username} 的sid')
+
+@socketio.on('ice_candidate')
+def handle_ice_candidate(data):
+    target_username = data.get('target')
+    candidate = data.get('candidate')
+    sender = data.get('sender')
+
+    if target_username and candidate and sender:
+        # 通过用户名找到对应的sid
+        target_sid = None
+        for users in username_to_sid.values():
+            if target_username in users:
+                target_sid = users[target_username]
+                break
+
+        if target_sid:
+            emit('ice_candidate', {'candidate': candidate, 'sender': sender}, to=target_sid)
+        else:
+            print(f'警告: 找不到用户 {target_username} 的sid')
+
+# ======================
+# SocketIO事件处理器 - 文字聊天
+# ======================
+
+@socketio.on('join_chat_room')
+def handle_join_chat_room(data):
+    room_id = data.get('room_id')
+    username = data.get('username')
+
+    if not room_id or not username:
+        return
+
+    # 加入SocketIO房间
+    join_room(room_id)
+
+    # 发送房间历史消息
+    room = chat_rooms.get(room_id)
+    if room is None:
+        room = {"next_id": 1, "messages": []}
+        chat_rooms[room_id] = room
+
+    with chat_lock:
+        msgs = room["messages"][-100:]  # 最近100条消息
+
+    emit('chat_history', {'messages': msgs})
+
+@socketio.on('send_chat_message')
+def handle_send_chat_message(data):
+    room_id = data.get('room_id')
+    username = data.get('username')
+    text = data.get('text')
+
+    if not room_id or not username or not text:
+        return
+
+    text = str(text).strip()
+    if not text:
+        return
+    if len(text) > 500:
+        emit('chat_error', {'error': '消息过长'})
+        return
+
+    room = chat_rooms.get(room_id)
+    if room is None:
+        room = {"next_id": 1, "messages": []}
+        chat_rooms[room_id] = room
+
+    with chat_lock:
+        msg_id = room["next_id"]
+        room["next_id"] += 1
+        msg = {
+            "id": msg_id,
+            "user": username,
+            "text": text,
+            "time": datetime.now().strftime('%H:%M')
+        }
+        room["messages"].append(msg)
+        # 保持消息数量不超过1000条
+        if len(room["messages"]) > 1000:
+            room["messages"] = room["messages"][-1000:]
+
+    # 广播消息给房间内所有用户
+    emit('chat_message', msg, room=room_id)
+    print(f'聊天消息: {username} 在房间 {room_id}: {text}')
+
 if __name__ == '__main__':
     import logging
     # 配置日志级别，只输出警告及以上级别的信息
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.WARNING)
-    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)

@@ -7,14 +7,19 @@ document.addEventListener('DOMContentLoaded', () => {
     initSidebars();
     initPortraitSwitch();
     // const particleSystem = new ParticleSystem(); // 禁用粒子效果
+
+    // 立即建立Socket.IO连接（用于聊天）
+    connectToSignalingServer();
+
     const input = document.getElementById('chat-input');
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             sendChat();
         }
     });
-    fetchChat();
-    setInterval(fetchChat, 1200);
+    // 移除HTTP轮询，使用WebSocket实时推送
+    // fetchChat();
+    // setInterval(fetchChat, 1200);
 
     // 更新时间显示
     updateTime();
@@ -369,17 +374,404 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// 语音控制
-function startVoiceClient() {
-    fetch(`/start-voice/${ROOM_CONFIG.roomId}`).then(r=>r.json()).then(d=>{
-        alert(d.success ? '语音启动成功！' : '失败：'+d.error);
-    })
+// WebRTC语音通话
+let socket = null;
+let localStream = null;
+let peerConnections = {};  // {username: RTCPeerConnection}
+let voiceEnabled = false;
+let iceCandidateQueues = {};  // {username: [candidate]} - 缓存ICE候选
+
+const iceServers = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+};
+
+// 连接Socket.IO服务器
+function connectToSignalingServer() {
+    try {
+        socket = io();
+
+        socket.on('connect', () => {
+            console.log('Socket.IO连接成功');
+            // 加入聊天房间（页面加载时就加入）
+            socket.emit('join_chat_room', {
+                room_id: ROOM_CONFIG.roomId,
+                username: ROOM_CONFIG.currentUser
+            });
+            // 语音房间在启动语音时才加入
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Socket.IO连接关闭');
+            if (voiceEnabled) {
+                // 自动重连
+                setTimeout(connectToSignalingServer, 3000);
+            }
+        });
+
+        socket.on('user_joined', (data) => {
+            console.log('用户加入:', data.username);
+            // 只有在自己已加入语音房间时，才向新用户发送offer
+            if (voiceEnabled) {
+                createPeerConnection(data.username, true);
+            }
+        });
+
+        socket.on('user_left', (data) => {
+            console.log('用户离开:', data.username);
+            // 关闭与该用户的连接
+            closePeerConnection(data.username);
+        });
+
+        socket.on('room_users', (data) => {
+            console.log('房间用户列表:', data.users);
+            // 只有在自己已加入语音房间时，才与房间内现有用户建立连接
+            if (voiceEnabled) {
+                for (const username of data.users) {
+                    createPeerConnection(username, false);
+                }
+            }
+        });
+
+        socket.on('webrtc_offer', async (data) => {
+            console.log('收到offer from:', data.sender);
+            await handleOffer(data);
+        });
+
+        socket.on('webrtc_answer', async (data) => {
+            console.log('收到answer from:', data.sender);
+            await handleAnswer(data);
+        });
+
+        socket.on('ice_candidate', async (data) => {
+            console.log('收到ICE候选 from:', data.sender);
+            await handleIceCandidate(data);
+        });
+
+        // 聊天消息监听
+        socket.on('chat_history', (data) => {
+            console.log('收到聊天历史:', data.messages);
+            const msgs = data.messages || [];
+            for (const m of msgs) {
+                appendChat(m);
+                if (m.id && m.id > lastChatId) lastChatId = m.id;
+            }
+        });
+
+        socket.on('chat_message', (data) => {
+            console.log('收到聊天消息:', data);
+            appendChat(data);
+            if (data.id && data.id > lastChatId) lastChatId = data.id;
+        });
+
+        socket.on('chat_error', (data) => {
+            console.error('聊天错误:', data.error);
+            alert('发送失败：' + (data.error || '未知错误'));
+        });
+
+    } catch (error) {
+        console.error('连接Socket.IO失败:', error);
+        alert('连接语音服务器失败，请检查网络');
+    }
 }
 
+// 创建对等连接
+async function createPeerConnection(username, isInitiator) {
+    if (peerConnections[username]) {
+        return;
+    }
+
+    const pc = new RTCPeerConnection(iceServers);
+
+    // 添加本地流
+    if (localStream) {
+        localStream.getTracks().forEach(track => {
+            pc.addTrack(track, localStream);
+        });
+    }
+
+    // 处理远程流
+    pc.ontrack = (event) => {
+        console.log('收到远程流 from:', username, 'tracks:', event.streams[0].getTracks().length);
+        playRemoteStream(event.streams[0]);
+    };
+
+    // 处理ICE候选
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            socket.emit('ice_candidate', {
+                candidate: event.candidate,
+                target: username,
+                sender: ROOM_CONFIG.currentUser
+            });
+        }
+    };
+
+    // 连接状态变化
+    pc.onconnectionstatechange = () => {
+        console.log(`与 ${username} 的连接状态:`, pc.connectionState);
+        if (pc.connectionState === 'connected') {
+            console.log(`✅ 与 ${username} 的WebRTC连接已建立`);
+        } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            console.log(`❌ 与 ${username} 的WebRTC连接断开或失败`);
+            closePeerConnection(username);
+        }
+    };
+
+    // ICE连接状态
+    pc.oniceconnectionstatechange = () => {
+        console.log(`与 ${username} 的ICE状态:`, pc.iceConnectionState);
+    };
+
+    peerConnections[username] = pc;
+
+    if (isInitiator) {
+        // 创建并发送offer
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('webrtc_offer', {
+            sdp: offer,
+            target: username,
+            sender: ROOM_CONFIG.currentUser
+        });
+    }
+
+    console.log('创建对等连接:', username);
+}
+
+// 处理offer
+async function handleOffer(data) {
+    const { sender, sdp } = data;
+    console.log(`处理offer from ${sender}, isNewConnection: ${!peerConnections[sender]}`);
+    const isNewConnection = !peerConnections[sender];
+    const pc = peerConnections[sender] || new RTCPeerConnection(iceServers);
+
+    // 只在新建连接时添加本地流
+    if (isNewConnection && localStream) {
+        console.log('添加本地流到PeerConnection');
+        localStream.getTracks().forEach(track => {
+            pc.addTrack(track, localStream);
+        });
+    }
+
+    // 处理远程流
+    pc.ontrack = (event) => {
+        console.log('收到远程流 from:', sender, 'stream:', event.streams[0]);
+        playRemoteStream(event.streams[0]);
+    };
+
+    // 处理ICE候选
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            console.log('发送ICE候选给', sender);
+            socket.emit('ice_candidate', {
+                candidate: event.candidate,
+                target: sender,
+                sender: ROOM_CONFIG.currentUser
+            });
+        }
+    };
+
+    peerConnections[sender] = pc;
+
+    console.log('设置远程描述...');
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    console.log('创建answer...');
+    const answer = await pc.createAnswer();
+    console.log('设置本地描述...');
+    await pc.setLocalDescription(answer);
+    console.log('发送answer给', sender);
+    socket.emit('webrtc_answer', {
+        sdp: answer,
+        target: sender,
+        sender: ROOM_CONFIG.currentUser
+    });
+
+    // 添加缓存的ICE候选
+    if (iceCandidateQueues[sender]) {
+        console.log(`添加 ${sender} 的 ${iceCandidateQueues[sender].length} 个缓存ICE候选`);
+        for (const cachedCandidate of iceCandidateQueues[sender]) {
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(cachedCandidate));
+            } catch (error) {
+                console.error(`添加缓存的ICE候选失败:`, error);
+            }
+        }
+        delete iceCandidateQueues[sender];
+    }
+}
+
+// 处理answer
+async function handleAnswer(data) {
+    const { sender, sdp } = data;
+    const pc = peerConnections[sender];
+    if (pc) {
+        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+
+        // 添加缓存的ICE候选
+        if (iceCandidateQueues[sender]) {
+            console.log(`添加 ${sender} 的 ${iceCandidateQueues[sender].length} 个缓存ICE候选`);
+            for (const cachedCandidate of iceCandidateQueues[sender]) {
+                try {
+                    await pc.addIceCandidate(new RTCIceCandidate(cachedCandidate));
+                } catch (error) {
+                    console.error(`添加缓存的ICE候选失败:`, error);
+                }
+            }
+            delete iceCandidateQueues[sender];
+        }
+    }
+}
+
+// 处理ICE候选
+async function handleIceCandidate(data) {
+    const { sender, candidate } = data;
+    const pc = peerConnections[sender];
+
+    if (!pc) {
+        console.log(`警告: 收到 ${sender} 的ICE候选，但连接不存在`);
+        return;
+    }
+
+    // 检查远程描述是否已设置
+    if (!pc.remoteDescription) {
+        // 缓存ICE候选，等待远程描述设置
+        if (!iceCandidateQueues[sender]) {
+            iceCandidateQueues[sender] = [];
+        }
+        iceCandidateQueues[sender].push(candidate);
+        console.log(`缓存 ${sender} 的ICE候选，等待远程描述`);
+        return;
+    }
+
+    try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        console.log(`成功添加 ${sender} 的ICE候选`);
+    } catch (error) {
+        console.error(`添加 ${sender} 的ICE候选失败:`, error);
+    }
+}
+
+// 播放远程流
+function playRemoteStream(stream) {
+    const audioElements = document.querySelectorAll('.remote-audio');
+    for (const audio of audioElements) {
+        if (audio.srcObject === stream) {
+            return;
+        }
+    }
+
+    const audio = new Audio();
+    audio.srcObject = stream;
+
+    // ============ 修复卡顿的关键代码 ============
+    audio.autoplay = true;
+    audio.playsInline = true;         // 必须加
+    audio.muted = false;              // 必须加
+    audio.preload = 'auto';           // 改成 auto，不要 metadata
+    audio.defaultMuted = false;
+
+    // 强制激活音频（解决浏览器休眠导致的卡顿）
+    audio.oncanplay = () => {
+        audio.play().catch(err => console.warn('音频自动播放需用户交互', err));
+    };
+
+    audio.className = 'remote-audio';
+    audio.style.display = 'none';
+    document.body.appendChild(audio);
+}
+
+// 关闭对等连接
+function closePeerConnection(username) {
+    const pc = peerConnections[username];
+    if (pc) {
+        pc.close();
+        delete peerConnections[username];
+    }
+
+    // 移除对应的音频元素
+    const audioElements = document.querySelectorAll('.remote-audio');
+    audioElements.forEach(audio => {
+        if (audio.srcObject) {
+            audio.srcObject.getTracks().forEach(track => track.stop());
+            audio.remove();
+        }
+    });
+}
+
+// 启动语音
+async function startVoiceClient() {
+    try {
+        console.log('开始获取音频流...');
+        // 获取本地音频流 - 优化参数减少卡顿
+        localStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                sampleRate: 24000,        // 提高一点，不卡且不吃性能
+                channelCount: 1,
+                latency: 0.01,            // 超低延迟
+                echoCancellationType: 'system'
+            },
+            video: false
+        });
+
+        console.log('音频流获取成功，tracks:', localStream.getTracks().length);
+        voiceEnabled = true;
+
+        // 加入语音房间（Socket.IO连接已在页面加载时建立）
+        if (socket) {
+            console.log('加入语音房间...');
+            socket.emit('join_voice_room', {
+                room_id: ROOM_CONFIG.roomId,
+                username: ROOM_CONFIG.currentUser
+            });
+        } else {
+            console.log('Socket.IO未连接，建立连接...');
+            // 如果socket未连接，建立连接
+            connectToSignalingServer();
+        }
+
+        // 强制浏览器不休眠音频（超级关键）
+        document.body.addEventListener('click', () => {
+            console.log('强制激活所有远程音频...');
+            document.querySelectorAll('.remote-audio').forEach(a => a.play());
+        }, { once: true });
+
+        alert('语音启动成功！');
+    } catch (error) {
+        console.error('获取音频流失败:', error);
+        alert('无法访问麦克风，请检查权限设置');
+    }
+}
+
+// 停止语音
 function stopVoiceClient() {
-    fetch('/stop-voice').then(r=>r.json()).then(d=>{
-        alert(d.success ? '语音已关闭' : '失败：'+d.error);
-    })
+    voiceEnabled = false;
+
+    // 关闭所有对等连接
+    Object.keys(peerConnections).forEach(username => {
+        closePeerConnection(username);
+    });
+
+    // 停止本地流
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+
+    // 离开语音房间（不断开Socket.IO连接，聊天功能需要）
+    if (socket) {
+        socket.emit('leave_voice_room', {
+            room_id: ROOM_CONFIG.roomId,
+            username: ROOM_CONFIG.currentUser
+        });
+    }
+
+    alert('语音已关闭');
 }
 
 // 聊天功能
@@ -406,34 +798,36 @@ function appendChat(m) {
 }
 
 function fetchChat() {
-    fetch(`/api/chat/history/${ROOM_CONFIG.roomId}?after=` + String(lastChatId))
-        .then(r => r.json())
-        .then(d => {
-            if (!d.success) return;
-            const msgs = d.messages || [];
-            for (const m of msgs) {
-                appendChat(m);
-                if (m.id && m.id > lastChatId) lastChatId = m.id;
-            }
-        });
+    // Socket.IO版本：不再需要HTTP轮询
+    // 消息通过Socket.IO实时推送
 }
 
 function sendChat() {
     const input = document.getElementById('chat-input');
     const text = (input.value || '').trim();
     if (!text) return;
-    fetch(`/api/chat/send/${ROOM_CONFIG.roomId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-    }).then(r => r.json()).then(d => {
-        if (d.success) {
-            input.value = '';
-            fetchChat();
-        } else {
-            alert('发送失败：' + (d.error || '未知错误'));
-        }
-    });
+
+    // 使用Socket.IO发送消息
+    if (socket) {
+        socket.emit('send_chat_message', {
+            room_id: ROOM_CONFIG.roomId,
+            username: ROOM_CONFIG.currentUser,
+            text: text
+        });
+        input.value = '';
+    } else {
+        alert('Socket.IO未连接');
+    }
+}
+
+// 加入聊天房间
+function joinChatRoom() {
+    if (socket) {
+        socket.emit('join_chat_room', {
+            room_id: ROOM_CONFIG.roomId,
+            username: ROOM_CONFIG.currentUser
+        });
+    }
 }
 
 // 粒子系统

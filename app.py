@@ -1,6 +1,5 @@
 # 小T语音应用 - 重构版本
 from flask import Flask, render_template, request, redirect, session, send_from_directory
-from flask_socketio import SocketIO, emit, join_room, leave_room
 import mysql.connector
 import sys
 import subprocess
@@ -35,107 +34,11 @@ from routes.profile import profile_bp
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
-# 初始化SocketIO
-socketio = SocketIO(app, cors_allowed_origins="*")
-
 # 全局变量
 voice_processes = {}
 room_users = {}
 chat_rooms = {}
 chat_lock = threading.Lock()
-
-# ======================
-# WebSocket聊天功能
-# ======================
-@socketio.on('connect')
-def handle_connect():
-    print(f"Client connected: {request.sid}")
-
-@socketio.on('join')
-def handle_join(data):
-    """用户加入聊天房间"""
-    room_id = data.get('room_id')
-    username = data.get('username')
-    if room_id and username:
-        join_room(room_id)
-        with chat_lock:
-            if room_id not in chat_rooms:
-                chat_rooms[room_id] = []
-            chat_rooms[room_id].append(username)
-        emit('message', {
-            'user': '系统',
-            'message': f'{username} 加入了房间',
-            'time': datetime.now().strftime('%H:%M:%S')
-        }, room=room_id)
-
-@socketio.on('leave')
-def handle_leave(data):
-    """用户离开聊天房间"""
-    room_id = data.get('room_id')
-    username = data.get('username')
-    if room_id and username:
-        leave_room(room_id)
-        with chat_lock:
-            if room_id in chat_rooms and username in chat_rooms[room_id]:
-                chat_rooms[room_id].remove(username)
-        emit('message', {
-            'user': '系统',
-            'message': f'{username} 离开了房间',
-            'time': datetime.now().strftime('%H:%M:%S')
-        }, room=room_id)
-
-@socketio.on('chat_message')
-def handle_chat_message(data):
-    """处理聊天消息"""
-    room_id = data.get('room_id')
-    username = data.get('username')
-    message = data.get('message')
-    if room_id and username and message:
-        emit('message', {
-            'user': username,
-            'message': message,
-            'time': datetime.now().strftime('%H:%M:%S')
-        }, room=room_id)
-
-# ======================
-# WebSocket语音传输功能
-# ======================
-@socketio.on('voice_join')
-def handle_voice_join(data):
-    """用户加入语音房间"""
-    room_id = data.get('room_id')
-    username = data.get('username')
-    if room_id and username:
-        join_room(f'voice_{room_id}')
-        emit('voice_event', {
-            'type': 'user_joined',
-            'username': username
-        }, room=f'voice_{room_id}')
-
-@socketio.on('voice_leave')
-def handle_voice_leave(data):
-    """用户离开语音房间"""
-    room_id = data.get('room_id')
-    username = data.get('username')
-    if room_id and username:
-        leave_room(f'voice_{room_id}')
-        emit('voice_event', {
-            'type': 'user_left',
-            'username': username
-        }, room=f'voice_{room_id}')
-
-@socketio.on('voice_data')
-def handle_voice_data(data):
-    """处理语音数据"""
-    room_id = data.get('room_id')
-    audio_data = data.get('audio')
-    username = data.get('username')
-    if room_id and audio_data:
-        # 广播语音数据给房间内其他用户
-        emit('voice_data', {
-            'audio': audio_data,
-            'username': username
-        }, room=f'voice_{room_id}', skip_sid=request.sid)
 
 # 注册蓝图
 app.register_blueprint(auth_bp)
@@ -170,9 +73,12 @@ def room(id):
 
     voice_users = []
     speaking_user = None
-    # 语音功能已集成为WebSocket，不需要HTTP调用
     try:
-        pass
+        response = requests.get(f'http://127.0.0.1:5001/api/room-users/{id}', timeout=2)
+        if response.status_code == 200:
+            data = response.json()
+            voice_users = data.get('users', [])
+            speaking_user = data.get('speaking')
     except:
         pass
 
@@ -396,9 +302,12 @@ def leave_room(room_id):
 def room_data(id):
     voice_users = []
     speaking_user = None
-    # 语音功能已集成为WebSocket，不需要HTTP调用
     try:
-        pass
+        res = requests.get(f'http://127.0.0.1:5001/api/room-users/{id}', timeout=1)
+        if res.status_code == 200:
+            d = res.json()
+            voice_users = d.get('users', [])
+            speaking_user = d.get('speaking')
     except:
         pass
 
@@ -484,5 +393,4 @@ if __name__ == '__main__':
     # 配置日志级别，只输出警告及以上级别的信息
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.WARNING)
-    # 使用socketio.run()支持WebSocket
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)

@@ -7,6 +7,12 @@ import requests
 import json
 import threading
 from datetime import datetime
+import logging
+
+# 减少日志输出
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
+logging.getLogger('engineio').setLevel(logging.WARNING)
+logging.getLogger('socketio').setLevel(logging.WARNING)
 
 # 导入配置
 from config import SECRET_KEY, DB_CONFIG, PROFILE_CACHE_TTL_SECONDS
@@ -66,15 +72,41 @@ def room(id):
 
     user = session['user']
 
-    profiles = get_user_profiles([user])
+    # 添加用户到房间
+    if id not in room_users:
+        room_users[id] = set()
+    room_users[id].add(user)
+
+    # 获取语音用户列表
+    voice_users = []
+    if id in socket_room_users:
+        voice_users = list(socket_room_users[id].values())
+
+    # 合并房间页面用户和语音用户
+    web_users = room_users.get(id, set())
+    all_users = web_users | set(voice_users)
+    count = len(all_users)
+
+    profiles = get_user_profiles(all_users)
     self_prof = profiles.get(user) or {}
     self_display = (self_prof.get("nickname") or user)
+
+    # 生成member_items HTML
+    member_items = ""
+    for u in sorted(all_users):
+        safe_u = u.replace("'", "").replace('"', "")
+        label = format_user_label(u, profiles.get(u))
+        info_link = f"<a class='user-info' href='/user/{safe_u}' onclick=\"event.stopPropagation();\">资料</a>"
+        if u in voice_users:
+            member_items += f"<li class='user-item voice' onclick=\"openVolumePanel('{safe_u}')\"><div class='user-main'><span class='badge badge-teal'>语音</span>{label}</div><div class='user-meta'>✅ {info_link}</div></li>"
+        else:
+            member_items += f"<li class='user-item online' onclick=\"openVolumePanel('{safe_u}')\"><div class='user-main'><span class='badge badge-gray'>在线</span>{label}</div><div class='user-meta'>• {info_link}</div></li>"
 
     return render_template('rooms/room.html',
                          room_id=id,
                          current_user=self_display,
-                         user_count=0,
-                         member_items="")
+                         user_count=count,
+                         member_items=member_items)
 
 @app.route('/leave-room/<room_id>')
 def leave_room(room_id):
@@ -87,7 +119,29 @@ def leave_room(room_id):
 
 @app.route('/room-data/<id>')
 def room_data(id):
-    return {"count": 0, "members": ""}
+    # 获取语音用户列表
+    voice_users = []
+    if id in socket_room_users:
+        voice_users = list(socket_room_users[id].values())
+
+    # 获取房间页面用户
+    web_users = room_users.get(id, set())
+    all_users = web_users | set(voice_users)
+    count = len(all_users)
+
+    # 生成member_items HTML
+    profiles = get_user_profiles(all_users)
+    member_items = ""
+    for u in sorted(all_users):
+        safe_u = u.replace("'", "").replace('"', "")
+        label = format_user_label(u, profiles.get(u))
+        info_link = f"<a class='user-info' href='/user/{safe_u}' onclick=\"event.stopPropagation();\">资料</a>"
+        if u in voice_users:
+            member_items += f"<li class='user-item voice' onclick=\"openVolumePanel('{safe_u}')\"><div class='user-main'><span class='badge badge-teal'>语音</span>{label}</div><div class='user-meta'>✅ {info_link}</div></li>"
+        else:
+            member_items += f"<li class='user-item online' onclick=\"openVolumePanel('{safe_u}')\"><div class='user-main'><span class='badge badge-gray'>在线</span>{label}</div><div class='user-meta'>• {info_link}</div></li>"
+
+    return {"count": count, "members": member_items}
 
 # 传统创建房间路由（保留兼容性）
 @app.route('/create', methods=['GET','POST'])
@@ -153,7 +207,10 @@ def create():
 # ======================
 
 # 存储房间内的用户信息
-socket_room_users = {}  # {room_id: {sid: username}}
+socket_room_users = {}  # {room_id: {sid: username}} - 语音房间用户
+
+# 存储房间内的用户（访问房间页面的用户）
+room_users = {}  # {room_id: set(username)} - 房间页面用户
 
 # 存储用户名到sid的映射 {room_id: {username: sid}}
 username_to_sid = {}
@@ -420,6 +477,11 @@ def handle_send_chat_message(data):
 if __name__ == '__main__':
     import logging
     # 配置日志级别，只输出警告及以上级别的信息
-    log = logging.getLogger('werkzeug')
-    log.setLevel(logging.WARNING)
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
+    logging.getLogger('engineio').setLevel(logging.ERROR)
+    logging.getLogger('socketio').setLevel(logging.ERROR)
+    logging.getLogger('geventwebsocket').setLevel(logging.ERROR)
+    # 禁用Flask的访问日志
+    import os
+    os.environ['WERKZEUG_RUN_MAIN'] = 'true'
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False, use_reloader=False, allow_unsafe_werkzeug=True, log_output=False)

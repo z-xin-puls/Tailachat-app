@@ -341,11 +341,7 @@ function applyMicGain() {
     const val = parseInt(micSlider.value, 10);
     document.getElementById('mic-val').innerText = val + '%';
     localStorage.setItem('micGain', String(val));
-    fetch('/api/volume/mic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gain: val / 100 })
-    });
+    // 音量控制现在在浏览器端本地处理，不需要后端API
 }
 
 function applyPlaybackGain() {
@@ -356,11 +352,7 @@ function applyPlaybackGain() {
     const val = parseInt(playSlider.value, 10);
     document.getElementById('play-val').innerText = val + '%';
     localStorage.setItem('playGain:' + currentTarget, String(val));
-    fetch('/api/volume/playback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: currentTarget, gain: val / 100 })
-    });
+    // 音量控制现在在浏览器端本地处理，不需要后端API
 }
 
 document.addEventListener('DOMContentLoaded', () => {

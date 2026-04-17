@@ -52,13 +52,9 @@
             </div>
             <div class="card-content">
                 <div class="voice-controls">
-                    <button class="terminal-btn terminal-btn-primary" onclick="startVoiceClient()">
-                        <span class="btn-icon">▶</span>
-                        <span class="btn-text">启动语音</span>
-                    </button>
-                    <button class="terminal-btn terminal-btn-danger" onclick="stopVoiceClient()">
-                        <span class="btn-icon">⏹</span>
-                        <span class="btn-text">关闭语音</span>
+                    <button class="terminal-btn terminal-btn-primary" id="voiceToggleBtn" onclick="toggleVoice()">
+                        <span class="btn-icon" id="voiceBtnIcon">▶</span>
+                        <span class="btn-text" id="voiceBtnText">启动语音</span>
                     </button>
                 </div>
             </div>

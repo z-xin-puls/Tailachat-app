@@ -608,6 +608,12 @@ async function handleAnswer(data) {
     const { sender, sdp } = data;
     const pc = peerConnections[sender];
     if (pc) {
+        // 检查连接状态，避免重复设置
+        if (pc.signalingState === 'stable') {
+            console.log(`连接状态已为stable，跳过设置answer from ${sender}`);
+            return;
+        }
+
         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
 
         // 添加缓存的ICE候选
@@ -741,7 +747,7 @@ async function startVoiceClient() {
             document.querySelectorAll('.remote-audio').forEach(a => a.play());
         }, { once: true });
 
-        alert('语音启动成功！');
+        updateVoiceButton(true);
     } catch (error) {
         console.error('获取音频流失败:', error);
         alert('无法访问麦克风，请检查权限设置');
@@ -771,7 +777,35 @@ function stopVoiceClient() {
         });
     }
 
-    alert('语音已关闭');
+    updateVoiceButton(false);
+}
+
+// 切换语音
+function toggleVoice() {
+    if (voiceEnabled) {
+        stopVoiceClient();
+    } else {
+        startVoiceClient();
+    }
+}
+
+// 更新语音按钮状态
+function updateVoiceButton(enabled) {
+    const btn = document.getElementById('voiceToggleBtn');
+    const icon = document.getElementById('voiceBtnIcon');
+    const text = document.getElementById('voiceBtnText');
+
+    if (enabled) {
+        icon.textContent = '⏹';
+        text.textContent = '关闭语音';
+        btn.classList.remove('terminal-btn-primary');
+        btn.classList.add('terminal-btn-danger');
+    } else {
+        icon.textContent = '▶';
+        text.textContent = '启动语音';
+        btn.classList.remove('terminal-btn-danger');
+        btn.classList.add('terminal-btn-primary');
+    }
 }
 
 // 聊天功能

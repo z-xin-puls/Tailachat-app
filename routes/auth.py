@@ -20,15 +20,15 @@ def login():
 
         db = get_db_connection()
         cursor = db.cursor()
-        cursor.execute("SELECT * FROM users WHERE username=%s AND password=%s", (user,pwd))
+        cursor.execute("SELECT id, username FROM users WHERE username=%s AND password=%s", (user,pwd))
         res = cursor.fetchone()
         db.close()
         if res:
             session['user'] = user
-            # 记录登录日志
+            # 记录登录日志，res[0]是用户ID，res[1]是用户名
             log_user_action(
                 user_id=res[0],
-                username=user,
+                username=res[1],
                 action_type='login',
                 ip=request.remote_addr,
                 user_agent=request.headers.get('User-Agent')

@@ -449,8 +449,22 @@ def handle_join_voice_room(data):
 
     print(f'用户 {username} 加入语音房间 {room_id}')
 
+    # 查询用户ID用于日志记录（支持昵称和用户名）
+    user_id = None
+    try:
+        db = get_db_connection()
+        cursor = db.cursor()
+        cursor.execute("SELECT id FROM users WHERE nickname=%s OR username=%s", (username, username))
+        result = cursor.fetchone()
+        if result:
+            user_id = result[0]
+        db.close()
+    except:
+        pass
+
     # 记录加入语音房间日志
     log_user_action(
+        user_id=user_id,
         username=username,
         action_type='start_voice',
         action_detail={'room_id': room_id},
@@ -477,8 +491,26 @@ def handle_leave_voice_room(data):
 
         print(f'用户 {username} 离开语音房间 {room_id}')
 
+        # 查询用户ID用于日志记录（支持昵称和用户名）
+        user_id = None
+        try:
+            db = get_db_connection()
+            cursor = db.cursor()
+            # 先尝试按昵称查询，再按用户名查询
+            cursor.execute("SELECT id FROM users WHERE nickname=%s OR username=%s", (username, username))
+            result = cursor.fetchone()
+            if result:
+                user_id = result[0]
+                print(f"[DEBUG] 查询到用户ID: {user_id} for {username}")
+            else:
+                print(f"[DEBUG] 未查询到用户ID for {username}")
+            db.close()
+        except Exception as e:
+            print(f"[DEBUG] 查询用户ID失败: {e}")
+
         # 记录离开语音房间日志
         log_user_action(
+            user_id=user_id,
             username=username,
             action_type='stop_voice',
             action_detail={'room_id': room_id},
@@ -610,8 +642,22 @@ def handle_send_chat_message(data):
     emit('chat_message', msg, room=room_id)
     print(f'聊天消息: {username} 在房间 {room_id}: {text}')
 
+    # 查询用户ID用于日志记录（支持昵称和用户名）
+    user_id = None
+    try:
+        db = get_db_connection()
+        cursor = db.cursor()
+        cursor.execute("SELECT id FROM users WHERE nickname=%s OR username=%s", (username, username))
+        result = cursor.fetchone()
+        if result:
+            user_id = result[0]
+        db.close()
+    except:
+        pass
+
     # 记录发送消息日志
     log_user_action(
+        user_id=user_id,
         username=username,
         action_type='send_message',
         action_detail={'room_id': room_id, 'message': text},

@@ -5,6 +5,7 @@ from models.user import get_user_profiles
 from models.room import get_all_rooms, create_room, create_room_with_fortress
 from utils.validators import validate_room_name
 from utils.helpers import html_escape
+from utils.logger import log_user_action
 import json
 import requests
 
@@ -109,9 +110,18 @@ def create_fortress_room():
     y = request.form['y']
     
     room_id, error = create_room_with_fortress(name, session['user'], x, y, fortress_id)
-    if error: 
+    if error:
         return error, 400
-    
+
+    # 记录创建房间日志
+    log_user_action(
+        username=session['user'],
+        action_type='create_room',
+        action_detail={'room_id': room_id, 'room_name': name, 'fortress_id': fortress_id},
+        ip=request.remote_addr,
+        user_agent=request.headers.get('User-Agent')
+    )
+
     return "success", 200
 
 @main_bp.route('/api/fortress_rooms/<int:fortress_id>')
@@ -164,7 +174,16 @@ def create_with_location():
     y = float(request.form['y'])
     
     room_id, error = create_room(name, session['user'], x, y)
-    if error: 
+    if error:
         return "error", 400
-    
+
+    # 记录创建房间日志
+    log_user_action(
+        username=session['user'],
+        action_type='create_room',
+        action_detail={'room_id': room_id, 'room_name': name, 'x': x, 'y': y},
+        ip=request.remote_addr,
+        user_agent=request.headers.get('User-Agent')
+    )
+
     return "success", 200

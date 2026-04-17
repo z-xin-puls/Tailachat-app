@@ -4,6 +4,7 @@ from models.database import get_db_connection
 from models.user import get_user_profiles
 from utils.validators import validate_username, validate_password
 from utils.helpers import html_escape
+from utils.logger import log_user_action
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -24,6 +25,14 @@ def login():
         db.close()
         if res:
             session['user'] = user
+            # 记录登录日志
+            log_user_action(
+                user_id=res[0],
+                username=user,
+                action_type='login',
+                ip=request.remote_addr,
+                user_agent=request.headers.get('User-Agent')
+            )
             return redirect("/")
         else:
             return "<h3>账号或密码错误</h3>"
@@ -94,6 +103,13 @@ def reg():
             cursor.execute("INSERT INTO users (username,password) VALUES (%s,%s)", (user,pwd))
             db.commit()
             db.close()
+            # 记录注册日志
+            log_user_action(
+                username=user,
+                action_type='register',
+                ip=request.remote_addr,
+                user_agent=request.headers.get('User-Agent')
+            )
             return redirect("/login")
         except Exception as e:
             if "Duplicate" in str(e):

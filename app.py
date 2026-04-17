@@ -449,6 +449,14 @@ def handle_join_voice_room(data):
 
     print(f'用户 {username} 加入语音房间 {room_id}')
 
+    # 记录加入语音房间日志
+    log_user_action(
+        username=username,
+        action_type='start_voice',
+        action_detail={'room_id': room_id},
+        ip=request.remote_addr if hasattr(request, 'remote_addr') else None
+    )
+
 @socketio.on('leave_voice_room')
 def handle_leave_voice_room(data):
     room_id = data.get('room_id')
@@ -468,6 +476,14 @@ def handle_leave_voice_room(data):
         emit('user_left', {'username': username}, room=room_id)
 
         print(f'用户 {username} 离开语音房间 {room_id}')
+
+        # 记录离开语音房间日志
+        log_user_action(
+            username=username,
+            action_type='stop_voice',
+            action_detail={'room_id': room_id},
+            ip=request.remote_addr if hasattr(request, 'remote_addr') else None
+        )
 
 @socketio.on('webrtc_offer')
 def handle_webrtc_offer(data):
@@ -531,6 +547,8 @@ def handle_ice_candidate(data):
 # SocketIO事件处理器 - 文字聊天
 # ======================
 
+from utils.logger import log_user_action
+
 @socketio.on('join_chat_room')
 def handle_join_chat_room(data):
     room_id = data.get('room_id')
@@ -591,6 +609,14 @@ def handle_send_chat_message(data):
     # 广播消息给房间内所有用户
     emit('chat_message', msg, room=room_id)
     print(f'聊天消息: {username} 在房间 {room_id}: {text}')
+
+    # 记录发送消息日志
+    log_user_action(
+        username=username,
+        action_type='send_message',
+        action_detail={'room_id': room_id, 'message': text},
+        ip=request.remote_addr if hasattr(request, 'remote_addr') else None
+    )
 
 if __name__ == '__main__':
     import logging

@@ -17,8 +17,11 @@ def get_real_online_count(room_id):
     """Get real online user count by calling app.py's API endpoint"""
     try:
         print(f"DEBUG: Getting online count for room {room_id}")
-        #  Call app.py's room_data endpoint via HTTP
-        res = requests.get(f'http://127.0.0.1:5000/room-data/{room_id}', timeout=2)
+        # 使用相对URL或从环境变量获取主机
+        from flask import current_app, request
+        # 获取当前请求的host
+        host = request.host_url.rstrip('/')
+        res = requests.get(f'{host}/room-data/{room_id}', timeout=2)
         print(f"DEBUG: API response status: {res.status_code}")
         if res.status_code == 200:
             result = res.json()

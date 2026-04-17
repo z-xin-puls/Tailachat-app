@@ -32,7 +32,7 @@ app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
 # 初始化SocketIO
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 # 全局变量
 chat_rooms = {}
@@ -75,6 +75,13 @@ def room(id):
                          current_user=self_display,
                          user_count=0,
                          member_items="")
+
+@app.route('/leave-room/<room_id>')
+def leave_room(room_id):
+    if "user" not in session:
+        return redirect("/login")
+    # 退出房间并返回首页
+    return redirect("/")
 
 # HTTP API路由已移除，改用Socket.IO实时通信
 

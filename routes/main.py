@@ -34,9 +34,9 @@ def index():
 
     rooms = get_all_rooms()
 
-    # 为每个房间添加在线人数
+    # 为每个房间添加在线人数（移除HTTP请求以提升性能）
     for room in rooms:
-        room['online_count'] = get_real_online_count(room['id'])
+        room['online_count'] = 0
 
     # 获取用户相关的房间（用户创建的或加入的）
     user_rooms = [room for room in rooms if room['owner'] == session['user']]
@@ -124,7 +124,7 @@ def get_fortress_rooms(fortress_id):
                 'x': row[3],
                 'y': row[4],
                 'fortress_id': row[5],
-                'online_count': get_real_online_count(row[0])
+                'online_count': 0  # 移除HTTP请求以提升性能
             })
 
         cursor.close()

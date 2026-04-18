@@ -376,8 +376,14 @@ let iceCandidateQueues = {};  // {username: [candidate]} - 缓存ICE候选
 const iceServers = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-    ]
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+        { urls: 'stun:stunserver.org:3478' },
+        { urls: 'stun:stun.cloudflare.com:3478' }
+    ],
+    iceCandidatePoolSize: 10
 };
 
 // 连接Socket.IO服务器
@@ -493,11 +499,22 @@ async function createPeerConnection(username, isInitiator) {
     // 处理ICE候选
     pc.onicecandidate = (event) => {
         if (event.candidate) {
+            console.log(`发送ICE候选给 ${username}:`, event.candidate.type, event.candidate.protocol, event.candidate.address);
             socket.emit('ice_candidate', {
                 candidate: event.candidate,
                 target: username,
                 sender: ROOM_CONFIG.currentUser
             });
+        } else {
+            console.log(`ICE候选收集完成 for ${username}`);
+        }
+    };
+
+    // ICE连接状态变化
+    pc.oniceconnectionstatechange = () => {
+        console.log(`ICE连接状态变化 for ${username}:`, pc.iceConnectionState);
+        if (pc.iceConnectionState === 'failed') {
+            console.error(`ICE连接失败 for ${username}`);
         }
     };
 
@@ -557,12 +574,22 @@ async function handleOffer(data) {
     // 处理ICE候选
     pc.onicecandidate = (event) => {
         if (event.candidate) {
-            console.log('发送ICE候选给', sender);
+            console.log(`发送ICE候选给 ${sender}:`, event.candidate.type, event.candidate.protocol, event.candidate.address);
             socket.emit('ice_candidate', {
                 candidate: event.candidate,
                 target: sender,
                 sender: ROOM_CONFIG.currentUser
             });
+        } else {
+            console.log(`ICE候选收集完成 for ${sender}`);
+        }
+    };
+
+    // ICE连接状态变化
+    pc.oniceconnectionstatechange = () => {
+        console.log(`ICE连接状态变化 for ${sender}:`, pc.iceConnectionState);
+        if (pc.iceConnectionState === 'failed') {
+            console.error(`ICE连接失败 for ${sender}`);
         }
     };
 

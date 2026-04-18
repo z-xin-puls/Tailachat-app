@@ -375,20 +375,23 @@ let iceCandidateQueues = {};  // {username: [candidate]} - 缓存ICE候选
 
 const iceServers = {
     iceServers: [
-        // STUN服务器
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' },
-        { urls: 'stun:stunserver.org:3478' },
-        { urls: 'stun:stun.cloudflare.com:3478' },
-        // 免费公共TURN服务器（Twilio）
-        { urls: 'stun:global.stun.twilio.com:3478' },
-        { urls: 'turn:global.turn.twilio.com:3478?transport=udp', username: '', credential: '' },
-        { urls: 'turn:global.turn.twilio.com:443?transport=udp', username: '', credential: '' },
-        { urls: 'turn:global.turn.twilio.com:3478?transport=tcp', username: '', credential: '' },
-        { urls: 'turn:global.turn.twilio.com:443?transport=tcp', username: '', credential: '' }
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun.cloudflare.com:3478" },
+        {
+            urls: "turn:turn.relay.metered.ca:80?transport=udp",
+            username: "shortterm",
+            credential: "shortterm"
+        },
+        {
+            urls: "turn:turn.relay.metered.ca:80?transport=tcp",
+            username: "shortterm",
+            credential: "shortterm"
+        },
+        {
+            urls: "turn:turn.relay.metered.ca:443?transport=tcp",
+            username: "shortterm",
+            credential: "shortterm"
+        }
     ],
     iceCandidatePoolSize: 10
 };
@@ -534,11 +537,6 @@ async function createPeerConnection(username, isInitiator) {
             console.log(`❌ 与 ${username} 的WebRTC连接断开或失败`);
             closePeerConnection(username);
         }
-    };
-
-    // ICE连接状态
-    pc.oniceconnectionstatechange = () => {
-        console.log(`与 ${username} 的ICE状态:`, pc.iceConnectionState);
     };
 
     peerConnections[username] = pc;

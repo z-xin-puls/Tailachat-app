@@ -383,9 +383,12 @@ const iceServers = {
         { urls: 'stun:stun4.l.google.com:19302' },
         { urls: 'stun:stunserver.org:3478' },
         { urls: 'stun:stun.cloudflare.com:3478' },
-        // 免费公共TURN服务器（Metered OpenRelay）
-        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
+        // 免费公共TURN服务器（Twilio）
+        { urls: 'stun:global.stun.twilio.com:3478' },
+        { urls: 'turn:global.turn.twilio.com:3478?transport=udp', username: '', credential: '' },
+        { urls: 'turn:global.turn.twilio.com:443?transport=udp', username: '', credential: '' },
+        { urls: 'turn:global.turn.twilio.com:3478?transport=tcp', username: '', credential: '' },
+        { urls: 'turn:global.turn.twilio.com:443?transport=tcp', username: '', credential: '' }
     ],
     iceCandidatePoolSize: 10
 };

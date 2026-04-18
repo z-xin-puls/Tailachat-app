@@ -929,108 +929,162 @@ a {
 .chat-box {
     height: 280px;
     overflow: auto;
-    padding: 12px;
+    padding: 14px;
     border-radius: 14px;
-    background: #111827;
-    border: 1px solid #374151
+    background: linear-gradient(135deg, rgba(17, 24, 39, 0.9), rgba(31, 41, 55, 0.8));
+    border: 1px solid rgba(55, 65, 81, 0.6);
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.2)
 }
 
 .chat-line {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     align-items: flex-start;
-    margin-bottom: 10px
+    margin-bottom: 12px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    transition: background 0.2s ease
+}
+
+.chat-line:hover {
+    background: rgba(255, 85, 85, 0.05)
 }
 
 .chat-time {
     color: #6b7280;
-    font-size: 12px;
-    min-width: 70px
+    font-size: 11px;
+    min-width: 70px;
+    font-weight: 600;
+    letter-spacing: 0.3px
 }
 
 .chat-user {
-    color: #2dd4bf;
+    color: #FF5555;
     font-weight: 900;
     min-width: 80px;
     max-width: 140px;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap
+    white-space: nowrap;
+    text-shadow: 0 0 8px rgba(255, 85, 85, 0.3)
 }
 
 .chat-text {
     color: #e5e7eb;
     white-space: pre-wrap;
     word-break: break-word;
-    flex: 1
+    flex: 1;
+    line-height: 1.5;
+    font-size: 13px
 }
 
 .chat-row {
     display: flex;
     gap: 10px;
-    margin-top: 10px
+    margin-top: 12px
 }
 
 .chat-input {
     flex: 1;
-    padding: 12px 14px;
-    background: #111827;
-    border: 1px solid #374151;
+    padding: 12px 16px;
+    background: rgba(17, 24, 39, 0.8);
+    border: 1px solid rgba(55, 65, 81, 0.6);
     color: #fff;
     border-radius: 12px;
     font-size: 14px;
-    outline: none
+    outline: none;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(4px)
 }
 
 .chat-input:focus {
-    border-color: #2dd4bf;
-    box-shadow: 0 0 0 3px #2dd4bf22
+    border-color: rgba(255, 85, 85, 0.5);
+    box-shadow: 0 0 0 3px rgba(255, 85, 85, 0.15), 0 0 12px rgba(255, 85, 85, 0.2)
 }
 
 .chat-send {
-    padding: 12px 16px;
+    padding: 12px 20px;
     border-radius: 12px;
-    background: #2dd4bf;
-    color: #111;
+    background: linear-gradient(135deg, rgba(255, 85, 85, 0.9), rgba(255, 85, 85, 0.7));
+    color: #fff;
     font-weight: 900;
-    border: none;
-    cursor: pointer
+    border: 1px solid rgba(255, 85, 85, 0.4);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(255, 85, 85, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)
 }
 
 .chat-send:hover {
-    filter: brightness(1.03)
+    background: linear-gradient(135deg, rgba(255, 85, 85, 1), rgba(255, 85, 85, 0.85));
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(255, 85, 85, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15)
+}
+
+.chat-send:active {
+    transform: translateY(0)
 }
 
 .user-list {
     list-style: none;
     display: flex;
     flex-direction: column;
-    gap: 8px
+    gap: 10px
 }
 
 .user-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    padding: 10px 12px;
-    border-radius: 12px;
-    background: #111827;
-    border: 1px solid #374151;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(17, 24, 39, 0.9), rgba(31, 41, 55, 0.8));
+    border: 1px solid rgba(55, 65, 81, 0.6);
     cursor: pointer;
-    transition: transform .08s ease, border-color .08s ease
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05)
+}
+
+.user-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 85, 85, 0.05), transparent);
+    opacity: 0;
+    transition: opacity 0.2s ease
 }
 
 .user-item:hover {
-    transform: translateY(-1px);
-    border-color: #2dd4bf55
+    transform: translateY(-2px) scale(1.01);
+    border-color: rgba(255, 85, 85, 0.4);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3), 0 0 15px rgba(255, 85, 85, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1)
+}
+
+.user-item:hover::before {
+    opacity: 1
+}
+
+.user-item.voice {
+    border-color: rgba(255, 85, 85, 0.3);
+    box-shadow: 0 2px 12px rgba(255, 85, 85, 0.1)
+}
+
+.user-item.voice:hover {
+    border-color: rgba(255, 85, 85, 0.5);
+    box-shadow: 0 6px 24px rgba(255, 85, 85, 0.2), 0 0 20px rgba(255, 85, 85, 0.2)
 }
 
 .user-main {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     align-items: center;
-    min-width: 0
+    min-width: 0;
+    flex: 1
 }
 
 .user-name {
@@ -1038,62 +1092,86 @@ a {
     color: #fff;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap
+    white-space: nowrap;
+    font-size: 14px;
+    letter-spacing: 0.3px;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.3)
 }
 
 .user-sub {
     color: #9ca3af;
     font-size: 12px;
-    margin-left: 10px;
+    margin-left: 8px;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap
+    white-space: nowrap;
+    font-weight: 600
 }
 
 .user-meta {
-    color: #9ca3af
+    color: #9ca3af;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600
 }
 
 .user-info {
-    margin-left: 10px;
-    color: #93c5fd;
-    border: 1px solid #374151;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 12px
+    color: #FF5555;
+    border: 1px solid rgba(255, 85, 85, 0.3);
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.2s ease;
+    background: rgba(255, 85, 85, 0.08);
+    backdrop-filter: blur(4px)
 }
 
 .user-info:hover {
-    filter: brightness(1.1)
+    background: rgba(255, 85, 85, 0.15);
+    border-color: rgba(255, 85, 85, 0.5);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(255, 85, 85, 0.2)
 }
 
 .badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 4px 8px;
+    padding: 5px 10px;
     border-radius: 999px;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 900;
-    border: 1px solid transparent
+    border: 1px solid transparent;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease
 }
 
 .badge-green {
-    background: #10b98122;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.1));
     color: #10b981;
-    border-color: #10b98155
+    border-color: rgba(16, 185, 129, 0.4);
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)
 }
 
 .badge-teal {
-    background: #2dd4bf22;
-    color: #2dd4bf;
-    border-color: #2dd4bf55
+    background: linear-gradient(135deg, rgba(255, 85, 85, 0.2), rgba(255, 85, 85, 0.1));
+    color: #FF5555;
+    border-color: rgba(255, 85, 85, 0.4);
+    box-shadow: 0 2px 8px rgba(255, 85, 85, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)
 }
 
 .badge-gray {
-    background: #37415155;
+    background: linear-gradient(135deg, rgba(107, 114, 128, 0.2), rgba(75, 85, 99, 0.15));
     color: #cbd5e1;
-    border-color: #374151
+    border-color: rgba(156, 163, 175, 0.4);
+    box-shadow: 0 2px 8px rgba(107, 114, 128, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08)
 }
 
 .panel {
@@ -1139,8 +1217,8 @@ a {
     display: none;
     position: fixed;
     inset: 0;
-    background: #0008;
-    backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
     padding: 18px;
     z-index: 9999
 }
@@ -1148,44 +1226,54 @@ a {
 .modal {
     max-width: 420px;
     margin: 8vh auto 0;
-    background: #1f2937;
-    border: 1px solid #111827;
+    background: linear-gradient(135deg, rgba(26, 16, 37, 0.95), rgba(17, 24, 39, 0.9));
+    border: 1px solid rgba(255, 85, 85, 0.3);
     border-radius: 16px;
-    box-shadow: 0 0 30px #000a;
-    overflow: hidden
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 24px rgba(255, 85, 85, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    overflow: hidden;
+    backdrop-filter: blur(12px)
 }
 
 .modal-head {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 14px 16px;
-    border-bottom: 1px solid #111827
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 85, 85, 0.2);
+    background: rgba(255, 85, 85, 0.05)
 }
 
 .modal-title {
-    color: #2dd4bf;
-    font-weight: 900
+    color: #FF5555;
+    font-weight: 900;
+    font-size: 16px;
+    letter-spacing: 0.5px;
+    text-shadow: 0 0 12px rgba(255, 85, 85, 0.4)
 }
 
 .icon-btn {
-    background: transparent;
-    border: 1px solid #374151;
+    background: rgba(26, 16, 37, 0.6);
+    border: 1px solid rgba(255, 85, 85, 0.3);
     color: #e5e7eb;
-    width: 34px;
-    height: 34px;
+    width: 36px;
+    height: 36px;
     border-radius: 10px;
     cursor: pointer;
     font-size: 18px;
-    line-height: 0
+    line-height: 0;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(4px)
 }
 
 .icon-btn:hover {
-    filter: brightness(1.05)
+    background: rgba(255, 85, 85, 0.2);
+    border-color: rgba(255, 85, 85, 0.5);
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(255, 85, 85, 0.2)
 }
 
 .modal-body {
-    padding: 14px 16px 16px
+    padding: 20px
 }
 
 .mono {
@@ -1196,16 +1284,62 @@ a {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px
+    gap: 10px;
+    margin-bottom: 12px
 }
 
 .slider {
     width: 100%;
-    margin-top: 8px
+    margin-top: 10px;
+    height: 6px;
+    background: rgba(55, 65, 81, 0.6);
+    border-radius: 3px;
+    outline: none;
+    -webkit-appearance: none
+}
+
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    background: #FF5555;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(255, 85, 85, 0.5);
+    transition: transform 0.2s ease
+}
+
+.slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2)
+}
+
+.slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: #FF5555;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 0 10px rgba(255, 85, 85, 0.5);
+    transition: transform 0.2s ease
+}
+
+.slider::-moz-range-thumb:hover {
+    transform: scale(1.2)
 }
 
 .section {
-    margin-top: 14px
+    margin-top: 20px;
+    padding: 16px;
+    background: rgba(17, 24, 39, 0.5);
+    border: 1px solid rgba(55, 65, 81, 0.4);
+    border-radius: 12px;
+    transition: all 0.2s ease
+}
+
+.section:hover {
+    border-color: rgba(255, 85, 85, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2)
 }
 
 .section:first-child {
@@ -1213,7 +1347,7 @@ a {
 }
 
 input[type="range"] {
-    accent-color: #2dd4bf
+    accent-color: #FF5555
 }
 
 .disabled {

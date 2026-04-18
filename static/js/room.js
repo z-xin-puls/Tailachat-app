@@ -375,13 +375,17 @@ let iceCandidateQueues = {};  // {username: [candidate]} - 缓存ICE候选
 
 const iceServers = {
     iceServers: [
+        // STUN服务器
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun3.l.google.com:19302' },
         { urls: 'stun:stun4.l.google.com:19302' },
         { urls: 'stun:stunserver.org:3478' },
-        { urls: 'stun:stun.cloudflare.com:3478' }
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        // 免费公共TURN服务器（Metered OpenRelay）
+        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
     ],
     iceCandidatePoolSize: 10
 };

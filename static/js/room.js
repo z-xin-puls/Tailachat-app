@@ -763,16 +763,17 @@ function closePeerConnection(username) {
 async function startVoiceClient() {
     try {
         console.log('开始获取音频流...');
-        // 获取本地音频流 - 优化参数减少卡顿
+        // 获取本地音频流 - 优化参数减少回声
         localStream = await navigator.mediaDevices.getUserMedia({
             audio: {
                 echoCancellation: true,
                 noiseSuppression: true,
-                autoGainControl: true,
-                sampleRate: 24000,        // 提高一点，不卡且不吃性能
+                autoGainControl: false,    // 关闭自动增益减少回声
+                sampleRate: 16000,         // 降低采样率减少回声
                 channelCount: 1,
-                latency: 0.01,            // 超低延迟
-                echoCancellationType: 'system'
+                latency: 0.05,            // 增加延迟减少回声
+                echoCancellationType: 'browser',
+                suppressLocalAudioPlayback: true  // 抑制本地音频回放
             },
             video: false
         });

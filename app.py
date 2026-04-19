@@ -1,4 +1,7 @@
 # 小T语音应用 - 重构版本
+import eventlet
+eventlet.monkey_patch()  # 必须放在最顶部！
+
 from flask import Flask, render_template, request, redirect, session, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import mysql.connector
@@ -38,8 +41,15 @@ from routes.admin import admin_bp
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
-# 初始化SocketIO
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+# 初始化SocketIO - 修复Bad file descriptor错误
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode='eventlet',
+    ping_timeout=60,
+    ping_interval=25,
+    max_http_buffer_size=1e8
+)
 
 # 全局变量
 chat_rooms = {}

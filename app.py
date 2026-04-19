@@ -219,10 +219,11 @@ username_to_sid = {}
 
 @socketio.on('connect')
 def handle_connect():
-    pass  # 移除连接日志
+    print(f'[DEBUG] Socket.IO连接成功 - SID: {request.sid}')
 
 @socketio.on('disconnect')
 def handle_disconnect():
+    print(f'[DEBUG] Socket.IO断开连接 - SID: {request.sid}')
     # 清理房间信息
     for room_id in socket_room_users:
         if request.sid in socket_room_users[room_id]:
@@ -230,6 +231,7 @@ def handle_disconnect():
             del socket_room_users[room_id][request.sid]
             if room_id in username_to_sid and username in username_to_sid[room_id]:
                 del username_to_sid[room_id][username]
+            print(f'[DEBUG] 用户离开语音房间 - 房间: {room_id}, 用户: {username}')
             # 通知房间内其他用户
             emit('user_left', {'username': username}, room=room_id, skip_sid=request.sid)
 
@@ -238,11 +240,15 @@ def handle_join_voice_room(data):
     room_id = data.get('room_id')
     username = data.get('username')
 
+    print(f'[DEBUG] 收到join_voice_room - 房间: {room_id}, 用户: {username}, SID: {request.sid}')
+
     if not room_id or not username:
+        print(f'[DEBUG] join_voice_room参数无效 - room_id: {room_id}, username: {username}')
         return
 
     # 加入SocketIO房间
     join_room(room_id)
+    print(f'[DEBUG] 用户加入Socket.IO房间 - 房间: {room_id}')
 
     # 记录用户信息
     if room_id not in socket_room_users:
@@ -252,15 +258,19 @@ def handle_join_voice_room(data):
 
     socket_room_users[room_id][request.sid] = username
     username_to_sid[room_id][username] = request.sid
+    print(f'[DEBUG] 用户信息已记录 - SID: {request.sid}, 用户名: {username}')
 
     # 获取房间内现有用户
     existing_users = [u for sid, u in socket_room_users[room_id].items() if sid != request.sid]
+    print(f'[DEBUG] 房间内现有用户: {existing_users}')
 
     # 通知房间内其他用户有新用户加入
     emit('user_joined', {'username': username}, room=room_id, skip_sid=request.sid)
+    print(f'[DEBUG] 已通知其他用户新用户加入')
 
     # 发送现有用户列表给新用户
     emit('room_users', {'users': existing_users})
+    print(f'[DEBUG] 已发送用户列表给新用户')
 
     print(f'用户 {username} 加入语音房间 {room_id}')
 

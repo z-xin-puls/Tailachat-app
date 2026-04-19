@@ -487,54 +487,64 @@ function connectToSignalingServer() {
 
 // 创建对等连接
 async function createPeerConnection(username, isInitiator) {
+    console.log(`[DEBUG] createPeerConnection - 用户: ${username}, 是否发起者: ${isInitiator}`);
     if (peerConnections[username]) {
+        console.log(`[DEBUG] 对等连接已存在，跳过创建 - 用户: ${username}`);
         return;
     }
 
+    console.log(`[DEBUG] 创建RTCPeerConnection - iceServers配置:`, iceServers);
     const pc = new RTCPeerConnection(iceServers);
 
     // 添加本地流
     if (localStream) {
+        console.log(`[DEBUG] 添加本地流 - tracks数量: ${localStream.getTracks().length}`);
         localStream.getTracks().forEach(track => {
+            console.log(`[DEBUG] 添加track - kind: ${track.kind}, id: ${track.id}, enabled: ${track.enabled}`);
             pc.addTrack(track, localStream);
         });
+    } else {
+        console.log(`[DEBUG] 警告: localStream为空`);
     }
 
     // 处理远程流
     pc.ontrack = (event) => {
-        console.log('收到远程流 from:', username, 'tracks:', event.streams[0].getTracks().length);
+        console.log(`[DEBUG] ontrack事件触发 - 用户: ${username}, tracks: ${event.streams[0].getTracks().length}`);
+        console.log(`[DEBUG] 远程流详情:`, event.streams[0]);
         playRemoteStream(event.streams[0]);
     };
 
     // 处理ICE候选
     pc.onicecandidate = (event) => {
         if (event.candidate) {
-            console.log(`发送ICE候选给 ${username}:`, event.candidate.type, event.candidate.protocol, event.candidate.address);
+            console.log(`[DEBUG] ICE候选 - 用户: ${username}, 类型: ${event.candidate.type}, 协议: ${event.candidate.protocol}, 地址: ${event.candidate.address}`);
             socket.emit('ice_candidate', {
                 candidate: event.candidate,
                 target: username,
                 sender: ROOM_CONFIG.currentUser
             });
         } else {
-            console.log(`ICE候选收集完成 for ${username}`);
+            console.log(`[DEBUG] ICE候选收集完成 - 用户: ${username}`);
         }
     };
 
     // ICE连接状态变化
     pc.oniceconnectionstatechange = () => {
-        console.log(`ICE连接状态变化 for ${username}:`, pc.iceConnectionState);
+        console.log(`[DEBUG] ICE连接状态变化 - 用户: ${username}, 状态: ${pc.iceConnectionState}`);
         if (pc.iceConnectionState === 'failed') {
-            console.error(`ICE连接失败 for ${username}`);
+            console.error(`[DEBUG] ICE连接失败 - 用户: ${username}`);
+        } else if (pc.iceConnectionState === 'connected') {
+            console.log(`[DEBUG] ✅ ICE连接成功 - 用户: ${username}`);
         }
     };
 
     // 连接状态变化
     pc.onconnectionstatechange = () => {
-        console.log(`与 ${username} 的连接状态:`, pc.connectionState);
+        console.log(`[DEBUG] WebRTC连接状态变化 - 用户: ${username}, 状态: ${pc.connectionState}`);
         if (pc.connectionState === 'connected') {
-            console.log(`✅ 与 ${username} 的WebRTC连接已建立`);
+            console.log(`[DEBUG] ✅ WebRTC连接已建立 - 用户: ${username}`);
         } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-            console.log(`❌ 与 ${username} 的WebRTC连接断开或失败`);
+            console.log(`[DEBUG] ❌ WebRTC连接断开或失败 - 用户: ${username}`);
             closePeerConnection(username);
         }
     };
@@ -558,13 +568,14 @@ async function createPeerConnection(username, isInitiator) {
 // 处理offer
 async function handleOffer(data) {
     const { sender, sdp } = data;
-    console.log(`处理offer from ${sender}, isNewConnection: ${!peerConnections[sender]}`);
+    console.log(`[DEBUG] handleOffer - 发送者: ${sender}, SDP类型: ${sdp.type}`);
     const isNewConnection = !peerConnections[sender];
+    console.log(`[DEBUG] 是否新连接: ${isNewConnection}`);
     const pc = peerConnections[sender] || new RTCPeerConnection(iceServers);
 
     // 只在新建连接时添加本地流
     if (isNewConnection && localStream) {
-        console.log('添加本地流到PeerConnection');
+        console.log(`[DEBUG] 添加本地流到PeerConnection - tracks数量: ${localStream.getTracks().length}`);
         localStream.getTracks().forEach(track => {
             pc.addTrack(track, localStream);
         });
@@ -572,14 +583,14 @@ async function handleOffer(data) {
 
     // 处理远程流
     pc.ontrack = (event) => {
-        console.log('收到远程流 from:', sender, 'stream:', event.streams[0]);
+        console.log(`[DEBUG] ontrack事件触发 - 发送者: ${sender}, stream:`, event.streams[0]);
         playRemoteStream(event.streams[0]);
     };
 
     // 处理ICE候选
     pc.onicecandidate = (event) => {
         if (event.candidate) {
-            console.log(`发送ICE候选给 ${sender}:`, event.candidate.type, event.candidate.protocol, event.candidate.address);
+            console.log(`[DEBUG] 发送ICE候选 - 发送者: ${sender}, 类型: ${event.candidate.type}, 协议: ${event.candidate.protocol}, 地址: ${event.candidate.address}`);
             socket.emit('ice_candidate', {
                 candidate: event.candidate,
                 target: sender,
@@ -630,69 +641,82 @@ async function handleOffer(data) {
 // 处理answer
 async function handleAnswer(data) {
     const { sender, sdp } = data;
+    console.log(`[DEBUG] handleAnswer - 发送者: ${sender}, SDP类型: ${sdp.type}`);
     const pc = peerConnections[sender];
     if (pc) {
+        console.log(`[DEBUG] PeerConnection存在 - 当前signalingState: ${pc.signalingState}`);
         // 检查连接状态，避免重复设置
         if (pc.signalingState === 'stable') {
-            console.log(`连接状态已为stable，跳过设置answer from ${sender}`);
+            console.log(`[DEBUG] 连接状态已为stable，跳过设置answer - 发送者: ${sender}`);
             return;
         }
 
+        console.log(`[DEBUG] 设置远程描述 - 发送者: ${sender}`);
         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        console.log(`[DEBUG] 远程描述设置完成 - 发送者: ${sender}`);
 
         // 添加缓存的ICE候选
         if (iceCandidateQueues[sender]) {
-            console.log(`添加 ${sender} 的 ${iceCandidateQueues[sender].length} 个缓存ICE候选`);
+            console.log(`[DEBUG] 添加缓存的ICE候选 - 发送者: ${sender}, 数量: ${iceCandidateQueues[sender].length}`);
             for (const cachedCandidate of iceCandidateQueues[sender]) {
                 try {
                     await pc.addIceCandidate(new RTCIceCandidate(cachedCandidate));
+                    console.log(`[DEBUG] 成功添加缓存ICE候选 - 发送者: ${sender}`);
                 } catch (error) {
-                    console.error(`添加缓存的ICE候选失败:`, error);
+                    console.error(`[DEBUG] 添加缓存的ICE候选失败 - 发送者: ${sender}, 错误:`, error);
                 }
             }
             delete iceCandidateQueues[sender];
+            console.log(`[DEBUG] 已清除ICE候选缓存 - 发送者: ${sender}`);
         }
+    } else {
+        console.log(`[DEBUG] 警告: 收到answer，但连接不存在 - 发送者: ${sender}`);
     }
 }
 
 // 处理ICE候选
 async function handleIceCandidate(data) {
     const { sender, candidate } = data;
+    console.log(`[DEBUG] handleIceCandidate - 发送者: ${sender}, 候选类型: ${candidate.type}, 协议: ${candidate.protocol}`);
     const pc = peerConnections[sender];
 
     if (!pc) {
-        console.log(`警告: 收到 ${sender} 的ICE候选，但连接不存在`);
+        console.log(`[DEBUG] 警告: 收到 ${sender} 的ICE候选，但连接不存在`);
         return;
     }
 
     // 检查远程描述是否已设置
     if (!pc.remoteDescription) {
+        console.log(`[DEBUG] 远程描述未设置，缓存ICE候选 - 发送者: ${sender}`);
         // 缓存ICE候选，等待远程描述设置
         if (!iceCandidateQueues[sender]) {
             iceCandidateQueues[sender] = [];
         }
         iceCandidateQueues[sender].push(candidate);
-        console.log(`缓存 ${sender} 的ICE候选，等待远程描述`);
+        console.log(`[DEBUG] 已缓存ICE候选 - 发送者: ${sender}, 当前缓存数量: ${iceCandidateQueues[sender].length}`);
         return;
     }
 
     try {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        console.log(`成功添加 ${sender} 的ICE候选`);
+        console.log(`[DEBUG] 成功添加ICE候选 - 发送者: ${sender}`);
     } catch (error) {
-        console.error(`添加 ${sender} 的ICE候选失败:`, error);
+        console.error(`[DEBUG] 添加ICE候选失败 - 发送者: ${sender}, 错误:`, error);
     }
 }
 
 // 播放远程流
 function playRemoteStream(stream) {
+    console.log(`[DEBUG] playRemoteStream - stream:`, stream);
     const audioElements = document.querySelectorAll('.remote-audio');
     for (const audio of audioElements) {
         if (audio.srcObject === stream) {
+            console.log(`[DEBUG] 音频元素已存在，跳过创建`);
             return;
         }
     }
 
+    console.log(`[DEBUG] 创建新的Audio元素`);
     const audio = new Audio();
     audio.srcObject = stream;
 
@@ -703,14 +727,18 @@ function playRemoteStream(stream) {
     audio.preload = 'auto';           // 改成 auto，不要 metadata
     audio.defaultMuted = false;
 
+    console.log(`[DEBUG] Audio属性设置 - autoplay: ${audio.autoplay}, playsInline: ${audio.playsInline}, muted: ${audio.muted}`);
+
     // 强制激活音频（解决浏览器休眠导致的卡顿）
     audio.oncanplay = () => {
-        audio.play().catch(err => console.warn('音频自动播放需用户交互', err));
+        console.log(`[DEBUG] oncanplay事件触发，尝试播放音频`);
+        audio.play().catch(err => console.warn('[DEBUG] 音频自动播放需用户交互:', err));
     };
 
     audio.className = 'remote-audio';
     audio.style.display = 'none';
     document.body.appendChild(audio);
+    console.log(`[DEBUG] Audio元素已添加到DOM`);
 }
 
 // 关闭对等连接

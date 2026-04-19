@@ -375,9 +375,15 @@ let iceCandidateQueues = {};  // {username: [candidate]} - 缓存ICE候选
 
 const iceServers = {
     iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun.cloudflare.com:3478" },
         {
             urls: "turn:turn.relay.metered.ca:80?transport=udp",
+            username: "shortterm",
+            credential: "shortterm"
+        },
+        {
+            urls: "turn:turn.relay.metered.ca:80?transport=tcp",
             username: "shortterm",
             credential: "shortterm"
         },
@@ -387,8 +393,7 @@ const iceServers = {
             credential: "shortterm"
         }
     ],
-    iceCandidatePoolSize: 5,
-    iceTransportPolicy: "all"
+    iceCandidatePoolSize: 10
 };
 
 // 连接Socket.IO服务器
@@ -404,9 +409,6 @@ function connectToSignalingServer() {
                 username: ROOM_CONFIG.currentUser
             });
             // 语音房间在启动语音时才加入
-
-            // 加这一行！保活！
-            setInterval(() => socket.emit('ping'), 2000);
         });
 
         socket.on('disconnect', () => {
@@ -684,21 +686,30 @@ async function handleIceCandidate(data) {
 
 // 播放远程流
 function playRemoteStream(stream) {
-    // 强制激活音频（解决 Railway 环境断连）
+    const audioElements = document.querySelectorAll('.remote-audio');
+    for (const audio of audioElements) {
+        if (audio.srcObject === stream) {
+            return;
+        }
+    }
+
     const audio = new Audio();
     audio.srcObject = stream;
-    audio.autoplay = true;
-    audio.playsInline = true;
-    audio.muted = false;
-    audio.preload = "auto";
 
-    // 强制播放
+    // ============ 修复卡顿的关键代码 ============
+    audio.autoplay = true;
+    audio.playsInline = true;         // 必须加
+    audio.muted = false;              // 必须加
+    audio.preload = 'auto';           // 改成 auto，不要 metadata
+    audio.defaultMuted = false;
+
+    // 强制激活音频（解决浏览器休眠导致的卡顿）
     audio.oncanplay = () => {
-        audio.play().catch(e => console.log("用户交互后自动激活"));
+        audio.play().catch(err => console.warn('音频自动播放需用户交互', err));
     };
 
-    audio.className = "remote-audio";
-    audio.style.display = "none";
+    audio.className = 'remote-audio';
+    audio.style.display = 'none';
     document.body.appendChild(audio);
 }
 
@@ -759,13 +770,6 @@ async function startVoiceClient() {
             console.log('强制激活所有远程音频...');
             document.querySelectorAll('.remote-audio').forEach(a => a.play());
         }, { once: true });
-
-        // 保活心跳，防止 Railway 断开
-        setInterval(() => {
-            if (socket && voiceEnabled) {
-                socket.emit('ping');
-            }
-        }, 3000);
 
         updateVoiceButton(true);
     } catch (error) {

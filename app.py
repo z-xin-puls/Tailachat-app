@@ -1,9 +1,4 @@
 # 小T语音应用 - 重构版本
-# 必须放在第一行！！！
-import gevent
-from gevent import monkey
-monkey.patch_all()
-
 from flask import Flask, render_template, request, redirect, session, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import mysql.connector
@@ -43,14 +38,8 @@ from routes.admin import admin_bp
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
-# 初始化SocketIO - 修复Bad file descriptor错误
-socketio = SocketIO(
-    app,
-    cors_allowed_origins="*",
-    async_mode='gevent',
-    ping_interval=20,
-    ping_timeout=60
-)
+# 初始化SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 # 全局变量
 chat_rooms = {}

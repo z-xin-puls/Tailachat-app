@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>泰拉通讯 - 用户管理</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0a0f; color: #e5e7eb; font-family: Segoe UI, 微软雅黑; min-height: 100vh; }
+        a { text-decoration: none; color: #FF5555; }
+        
+        .topbar {
+            background: rgba(26, 16, 37, 0.7);
+            border-bottom: 1px solid rgba(255, 85, 85, 0.3);
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(10px);
+        }
+        
+        .title { color: #FF5555; font-size: 20px; font-weight: 900; }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        
+        .header h1 { color: #fff; font-size: 28px; font-weight: 700; }
+        
+        .nav {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .nav-btn {
+            background: rgba(26, 16, 37, 0.6);
+            color: #e5e7eb;
+            border: 1px solid rgba(255, 85, 85, 0.3);
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            backdrop-filter: blur(10px);
+        }
+        
+        .nav-btn:hover { background: rgba(255, 85, 85, 0.2); border-color: rgba(255, 85, 85, 0.5); }
+        .nav-btn.active { background: rgba(255, 85, 85, 0.3); color: #FF5555; border-color: rgba(255, 85, 85, 0.5); }
+        
+        .table-container {
+            background: rgba(26, 16, 37, 0.6);
+            border: 1px solid rgba(255, 85, 85, 0.3);
+            border-radius: 12px;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            background: #111827;
+            color: #9ca3af;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid #374151;
+        }
+        
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #374151;
+            font-size: 14px;
+        }
+        
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background: #111827; }
+        
+        .role-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .role-admin { background: rgba(255, 85, 85, 0.3); color: #FF5555; border: 1px solid rgba(255, 85, 85, 0.5); }
+        .role-user { background: rgba(107, 114, 128, 0.2); color: #cbd5e1; border: 1px solid rgba(156, 163, 175, 0.4); }
+        
+        .action-btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            margin-right: 6px;
+        }
+        
+        .btn-promote { background: rgba(255, 85, 85, 0.2); color: #FF5555; border: 1px solid rgba(255, 85, 85, 0.4); }
+        .btn-demote { background: #f59e0b; color: #111; }
+        .btn-delete { background: #ef4444; color: #fff; }
+        
+        .action-btn:hover { filter: brightness(1.1); }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <div class="title">👥 用户管理</div>
+        <a href="/admin" style="color: #9ca3af; font-size: 14px;">← 返回面板</a>
+    </div>
+    
+    <div class="container">
+        <div class="header">
+            <h1>用户列表</h1>
+            <div class="nav">
+                <button class="nav-btn" onclick="window.location.href='/admin'">概览</button>
+                <button class="nav-btn active">用户管理</button>
+                <button class="nav-btn" onclick="window.location.href='/admin/rooms'">房间管理</button>
+                <button class="nav-btn" onclick="window.location.href='/admin/fortresses'">据点管理</button>
+            </div>
+        </div>
+        
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>用户名</th>
+                        <th>昵称</th>
+                        <th>角色</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="userTable">
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.username }}</td>
+                        <td>{{ user.nickname or '-' }}</td>
+                        <td>
+                            <span class="role-badge {{ 'role-admin' if user.role == 'admin' else 'role-user' }}">
+                                {{ '管理员' if user.role == 'admin' else '用户' }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if user.role == 'user' %}
+                            <button class="action-btn btn-promote" onclick="updateRole('{{ user.username }}', 'admin')">设为管理员</button>
+                            {% else %}
+                            <button class="action-btn btn-demote" onclick="updateRole('{{ user.username }}', 'user')">设为用户</button>
+                            {% endif %}
+                            <button class="action-btn btn-delete" onclick="deleteUser('{{ user.username }}')">删除</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script>
+        async function updateRole(username, newRole) {
+            if (!confirm(`确定要将用户 ${username} 的角色修改为 ${newRole === 'admin' ? '管理员' : '用户'} 吗？`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/admin/api/user/${username}/role`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role: newRole })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.error || '操作失败');
+                }
+            } catch (error) {
+                alert('操作失败: ' + error.message);
+            }
+        }
+        
+        async function deleteUser(username) {
+            if (!confirm(`确定要删除用户 ${username} 吗？此操作不可恢复！`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/admin/api/user/${username}/delete`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.error || '删除失败');
+                }
+            } catch (error) {
+                alert('删除失败: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

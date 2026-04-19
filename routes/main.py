@@ -1,7 +1,7 @@
 # 主页和地图路由
 from flask import Blueprint, request, redirect, render_template, session, jsonify
 from models.database import get_db_connection
-from models.user import get_user_profiles
+from models.user import get_user_profiles, get_user_role
 from models.room import get_all_rooms, create_room, create_room_with_fortress
 from utils.validators import validate_room_name
 from utils.helpers import html_escape
@@ -31,6 +31,9 @@ def index():
 
     prof = get_user_profiles([session["user"]]).get(session["user"]) or {}
     display_user = (prof.get("nickname") or session["user"])
+    
+    # 获取用户角色
+    user_role = get_user_role(session['user'])
 
     rooms = get_all_rooms()
 
@@ -70,6 +73,7 @@ def index():
 
     return render_template('main/index.html',
                          current_user=html_escape(display_user),
+                         user_role=user_role,
                          rooms=json.dumps([{'id': r['id'], 'name': r['name'], 'owner': r['owner'], 'x': r['x'], 'y': r['y'], 'online_count': r['online_count']} for r in rooms]),
                          user_rooms=json.dumps([{'id': r['id'], 'name': r['name'], 'owner': r['owner'], 'x': r['x'], 'y': r['y'], 'online_count': r['online_count']} for r in user_rooms]),
                          fortresses=json.dumps(fortress_list))

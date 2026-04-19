@@ -88,3 +88,39 @@ def format_user_label(username, profile_item):
     if nick and nick != username:
         return f"<div style='display:flex;align-items:center;gap:8px;min-width:0'>{avatar_img}<span class='user-name'>{nick}</span><span class='user-sub'>@{u}</span></div>"
     return f"<div style='display:flex;align-items:center;gap:8px;min-width:0'>{avatar_img}<span class='user-name'>{u}</span></div>"
+
+def is_admin(username):
+    """检查用户是否为管理员"""
+    if not username:
+        return False
+    
+    try:
+        db = get_db_connection()
+        cursor = db.cursor()
+        cursor.execute("SELECT role FROM users WHERE username = %s", (username,))
+        result = cursor.fetchone()
+        db.close()
+        
+        if result and result[0] == 'admin':
+            return True
+        return False
+    except:
+        return False
+
+def get_user_role(username):
+    """获取用户角色"""
+    if not username:
+        return 'user'
+    
+    try:
+        db = get_db_connection()
+        cursor = db.cursor()
+        cursor.execute("SELECT role FROM users WHERE username = %s", (username,))
+        result = cursor.fetchone()
+        db.close()
+        
+        if result:
+            return result[0]
+        return 'user'
+    except:
+        return 'user'

@@ -45,6 +45,11 @@
                 <button class="sidebar-btn" onclick="showMyOutpostsModal()">
                     🏰 我的房间
                 </button>
+                {% if user_role == 'admin' %}
+                <button class="sidebar-btn" style="background: rgba(255, 85, 85, 0.2); color: #FF5555; border-color: rgba(255, 85, 85, 0.4);" onclick="window.location.href='/admin'">
+                    🔐 管理员面板
+                </button>
+                {% endif %}
             </div>
             
             <div class="sidebar-section">

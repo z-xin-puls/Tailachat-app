@@ -4,5 +4,5 @@ python-engineio
 python-socketio
 requests
 gunicorn
-eventlet
+gevent
 mysql-connector-python

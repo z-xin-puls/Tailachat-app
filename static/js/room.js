@@ -375,15 +375,9 @@ let iceCandidateQueues = {};  // {username: [candidate]} - 缓存ICE候选
 
 const iceServers = {
     iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun.cloudflare.com:3478" },
         {
             urls: "turn:turn.relay.metered.ca:80?transport=udp",
-            username: "shortterm",
-            credential: "shortterm"
-        },
-        {
-            urls: "turn:turn.relay.metered.ca:80?transport=tcp",
             username: "shortterm",
             credential: "shortterm"
         },
@@ -393,7 +387,8 @@ const iceServers = {
             credential: "shortterm"
         }
     ],
-    iceCandidatePoolSize: 10
+    iceCandidatePoolSize: 5,
+    iceTransportPolicy: "all"
 };
 
 // 连接Socket.IO服务器
@@ -409,6 +404,9 @@ function connectToSignalingServer() {
                 username: ROOM_CONFIG.currentUser
             });
             // 语音房间在启动语音时才加入
+
+            // 加这一行！保活！
+            setInterval(() => socket.emit('ping'), 2000);
         });
 
         socket.on('disconnect', () => {

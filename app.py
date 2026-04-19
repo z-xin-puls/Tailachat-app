@@ -1,6 +1,8 @@
 # 小T语音应用 - 重构版本
-import eventlet
-eventlet.monkey_patch()  # 必须放在最顶部！
+# 必须放在第一行！！！
+import gevent
+from gevent import monkey
+monkey.patch_all()
 
 from flask import Flask, render_template, request, redirect, session, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -45,10 +47,9 @@ app.secret_key = SECRET_KEY
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode='eventlet',
-    ping_timeout=60,
-    ping_interval=25,
-    max_http_buffer_size=1e8
+    async_mode='gevent',
+    ping_interval=20,
+    ping_timeout=60
 )
 
 # 全局变量

@@ -41,6 +41,7 @@ async function fetchXirsysCredentials() {
             iceServers = data.v;
             console.log('[Xirsys] ✅ 凭据获取成功，ICE服务器已更新');
             console.log('[Xirsys] ICE服务器配置:', iceServers);
+            console.log('[Xirsys] ICE服务器列表:', iceServers.iceServers);
             return true;
         } else {
             console.error('[Xirsys] ❌ 凭据获取失败:', data);

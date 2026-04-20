@@ -243,6 +243,11 @@ class WebRTCManager {
 
         if (this.trtcClient) {
             try {
+                // 停止本地音频流（释放麦克风）
+                await this.trtcClient.stopLocalAudio();
+                console.log('[TRTC] 停止本地音频流');
+                
+                // 离开房间
                 await this.trtcClient.exitRoom();
                 this.trtcClient = null;
                 this.remoteStreams = {};

@@ -171,46 +171,48 @@ class WebRTCManager {
         }
 
         try {
-            // 创建TRTC客户端
-            this.trtcClient = TRTC.createClient({
-                mode: 'rtc',
+            // 创建TRTC对象（v5 API）
+            this.trtcClient = TRTC.create();
+
+            // 监听事件
+            this.trtcClient.on(TRTC.EVENT.REMOTE_AUDIO_AVAILABLE, (event) => {
+                const { userId, stream } = event;
+                console.log('[TRTC] 收到远程音频流:', userId);
+                if (this.onRemoteStreamCallback) {
+                    this.onRemoteStreamCallback(stream, userId);
+                }
+                this.remoteStreams[userId] = stream;
+            });
+
+            this.trtcClient.on(TRTC.EVENT.REMOTE_AUDIO_UNAVAILABLE, (event) => {
+                const { userId } = event;
+                console.log('[TRTC] 远程音频流移除:', userId);
+                delete this.remoteStreams[userId];
+            });
+
+            this.trtcClient.on(TRTC.EVENT.USER_LEAVE, (event) => {
+                const { userId } = event;
+                console.log('[TRTC] 用户离开:', userId);
+                delete this.remoteStreams[userId];
+            });
+
+            this.trtcClient.on(TRTC.EVENT.ERROR, (error) => {
+                console.error('[TRTC] 错误:', error);
+            });
+
+            // 加入房间
+            await this.trtcClient.enterRoom({
+                roomId: this.roomConfig.roomId,
                 sdkAppId: this.sdkAppId,
                 userId: this.roomConfig.currentUser,
                 userSig: this.userSig
             });
 
-            // 监听事件
-            this.trtcClient.on('stream-added', (event) => {
-                const remoteStream = event.stream;
-                console.log('[TRTC] 收到远程流:', remoteStream.getUserId());
-                this.subscribeRemoteStream(remoteStream);
-            });
-
-            this.trtcClient.on('stream-removed', (event) => {
-                const remoteStream = event.stream;
-                console.log('[TRTC] 远程流移除:', remoteStream.getUserId());
-                delete this.remoteStreams[remoteStream.getUserId()];
-            });
-
-            this.trtcClient.on('peer-leave', (event) => {
-                console.log('[TRTC] 用户离开:', event.userId);
-                delete this.remoteStreams[event.userId];
-            });
-
-            this.trtcClient.on('error', (error) => {
-                console.error('[TRTC] 错误:', error);
-            });
-
-            // 加入房间
-            await this.trtcClient.join({
-                roomId: this.roomConfig.roomId.toString()
-            });
-
             console.log('[TRTC] 成功加入房间');
 
-            // 推流
+            // 推流（音频）
             if (this.localStream) {
-                await this.trtcClient.publish(this.localStream);
+                await this.trtcClient.startLocalAudio();
                 console.log('[TRTC] 成功推流');
             }
 
@@ -220,31 +222,13 @@ class WebRTCManager {
         }
     }
 
-    // 订阅远程流
-    async subscribeRemoteStream(remoteStream) {
-        try {
-            await this.trtcClient.subscribe(remoteStream);
-            console.log('[TRTC] 成功订阅远程流:', remoteStream.getUserId());
-
-            // 播放远程流
-            if (this.onRemoteStreamCallback) {
-                this.onRemoteStreamCallback(remoteStream, remoteStream.getUserId());
-            }
-
-            this.remoteStreams[remoteStream.getUserId()] = remoteStream;
-
-        } catch (error) {
-            console.error('[TRTC] 订阅远程流失败:', error);
-        }
-    }
-
     // 离开语音房间
     async leaveVoiceRoom() {
         console.log('[TRTC] 离开语音房间');
 
         if (this.trtcClient) {
             try {
-                await this.trtcClient.leave();
+                await this.trtcClient.exitRoom();
                 this.trtcClient = null;
                 this.remoteStreams = {};
                 console.log('[TRTC] 成功离开房间');

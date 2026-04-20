@@ -375,25 +375,32 @@ let iceCandidateQueues = {};  // {username: [candidate]} - 缓存ICE候选
 
 const iceServers = {
     iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun.cloudflare.com:3478" },
+        // Xirsys 官方 STUN
+        { urls: "stun:global.xirsys.net:3478" },
+
+        // Xirsys TURN UDP
         {
-            urls: "turn:turn.relay.metered.ca:80?transport=udp",
-            username: "shortterm",
-            credential: "shortterm"
+            urls: "turn:global.xirsys.net:3478?transport=udp",
+            username: "ZhiX",
+            credential: "13492606-3c16-11f1-b80d-0242ac150003"
         },
+
+        // Xirsys TURN TCP（校园网必加）
         {
-            urls: "turn:turn.relay.metered.ca:80?transport=tcp",
-            username: "shortterm",
-            credential: "shortterm"
+            urls: "turn:global.xirsys.net:3478?transport=tcp",
+            username: "ZhiX",
+            credential: "13492606-3c16-11f1-b80d-0242ac150003"
         },
+
+        // Xirsys TURN TLS（终极防火墙穿透）
         {
-            urls: "turn:turn.relay.metered.ca:443?transport=tcp",
-            username: "shortterm",
-            credential: "shortterm"
+            urls: "turns:global.xirsys.net:5349?transport=tcp",
+            username: "ZhiX",
+            credential: "13492606-3c16-11f1-b80d-0242ac150003"
         }
     ],
-    iceCandidatePoolSize: 10
+    iceCandidatePoolSize: 10,
+    iceTransportPolicy: "relay"  // 强制走中继 → 校园网 100% 通
 };
 
 // 连接Socket.IO服务器

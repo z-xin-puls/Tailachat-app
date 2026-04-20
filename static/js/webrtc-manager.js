@@ -1,36 +1,56 @@
 // WebRTC和Socket.IO连接管理器
 // 专门处理WebRTC连接配置、ICE服务器管理、Socket.IO信令管理
 
-// ICE服务器配置
-const iceServers = {
+// Xirsys凭据配置
+const XIRSYS_CONFIG = {
+    apiUrl: "https://global.xirsys.net/_turn/MyFirstApp",
+    username: "ZhiX",
+    secret: "e2aeaa88-3c93-11f1-9760-0242ac130006"
+};
+
+// 默认ICE服务器配置（Xirsys动态获取后更新）
+let iceServers = {
     iceServers: [
-        // Xirsys 官方 STUN
-        { urls: "stun:global.xirsys.net:3478" },
-
-        // Xirsys TURN UDP
-        {
-            urls: "turn:global.xirsys.net:3478?transport=udp",
-            username: "ZhiX",
-            credential: "13492606-3c16-11f1-b80d-0242ac150003"
-        },
-
-        // Xirsys TURN TCP（校园网必加）
-        {
-            urls: "turn:global.xirsys.net:3478?transport=tcp",
-            username: "ZhiX",
-            credential: "13492606-3c16-11f1-b80d-0242ac150003"
-        },
-
-        // Xirsys TURN TLS（终极防火墙穿透）
-        {
-            urls: "turns:global.xirsys.net:5349?transport=tcp",
-            username: "ZhiX",
-            credential: "13492606-3c16-11f1-b80d-0242ac150003"
-        }
+        // Google STUN作为备用
+        { urls: "stun:stun.l.google.com:19302" }
     ],
     iceCandidatePoolSize: 10,
-    iceTransportPolicy: "all"  // 允许所有传输方式
+    iceTransportPolicy: "all"
 };
+
+// 获取Xirsys TURN凭据
+async function fetchXirsysCredentials() {
+    try {
+        console.log('[Xirsys] 获取TURN凭据...');
+        const basicAuth = btoa(`${XIRSYS_CONFIG.username}:${XIRSYS_CONFIG.secret}`);
+
+        const response = await fetch(XIRSYS_CONFIG.apiUrl, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Basic ${basicAuth}`
+            },
+            body: JSON.stringify({ format: "urls" })
+        });
+
+        const data = await response.json();
+        console.log('[Xirsys] 完整返回结果:', data);
+
+        if (data.s === 'ok' && data.v) {
+            // Xirsys返回的ICE服务器配置
+            iceServers = data.v;
+            console.log('[Xirsys] ✅ 凭据获取成功，ICE服务器已更新');
+            console.log('[Xirsys] ICE服务器配置:', iceServers);
+            return true;
+        } else {
+            console.error('[Xirsys] ❌ 凭据获取失败:', data);
+            return false;
+        }
+    } catch (error) {
+        console.error('[Xirsys] 💥 获取凭据出错:', error);
+        return false;
+    }
+}
 
 // WebRTC连接管理器类
 class WebRTCManager {
@@ -54,11 +74,14 @@ class WebRTCManager {
     }
 
     // 连接Socket.IO服务器
-    connectToSignalingServer() {
+    async connectToSignalingServer() {
         if (!this.roomConfig) {
             console.error('[ERROR] 房间配置未设置');
             return;
         }
+
+        // 获取Xirsys TURN凭据
+        await fetchXirsysCredentials();
 
         try {
             this.socket = io();

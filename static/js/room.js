@@ -400,7 +400,7 @@ const iceServers = {
         }
     ],
     iceCandidatePoolSize: 10,
-    iceTransportPolicy: "relay"  // 强制走中继 → 校园网 100% 通
+    iceTransportPolicy: "all"  // 允许所有传输方式
 };
 
 // 连接Socket.IO服务器
@@ -523,6 +523,7 @@ async function createPeerConnection(username, isInitiator) {
 
     // 处理ICE候选
     pc.onicecandidate = (event) => {
+        console.log(`[DEBUG] onicecandidate事件触发 - 用户: ${username}, candidate: ${event.candidate ? '存在' : 'null'}`);
         if (event.candidate) {
             console.log(`[DEBUG] ICE候选 - 用户: ${username}, 类型: ${event.candidate.type}, 协议: ${event.candidate.protocol}, 地址: ${event.candidate.address}`);
             socket.emit('ice_candidate', {

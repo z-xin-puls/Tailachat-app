@@ -49,6 +49,10 @@ async function fetchXirsysCredentials(manager) {
             console.log('[Xirsys] ICE服务器配置:', iceServers);
             console.log('[Xirsys] ICE服务器列表:', iceServers.iceServers);
             console.log('[Xirsys] iceServers是否为数组:', Array.isArray(iceServers.iceServers));
+            // 详细打印每个ICE服务器
+            iceServers.iceServers.forEach((server, index) => {
+                console.log(`[Xirsys] ICE服务器 ${index + 1}:`, server);
+            });
             return true;
         } else {
             console.error('[Xirsys] ❌ 凭据获取失败:', data);

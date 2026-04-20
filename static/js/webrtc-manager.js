@@ -38,10 +38,12 @@ async function fetchXirsysCredentials() {
 
         if (data.s === 'ok' && data.v) {
             // Xirsys返回的ICE服务器配置
+            // data.v 包含完整的配置对象，直接使用
             iceServers = data.v;
             console.log('[Xirsys] ✅ 凭据获取成功，ICE服务器已更新');
             console.log('[Xirsys] ICE服务器配置:', iceServers);
             console.log('[Xirsys] ICE服务器列表:', iceServers.iceServers);
+            console.log('[Xirsys] iceServers是否为数组:', Array.isArray(iceServers.iceServers));
             return true;
         } else {
             console.error('[Xirsys] ❌ 凭据获取失败:', data);

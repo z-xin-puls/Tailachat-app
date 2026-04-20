@@ -2,7 +2,7 @@
 from gevent import monkey
 monkey.patch_all()
 
-from flask import Flask, render_template, request, redirect, session, send_from_directory
+from flask import Flask, render_template, request, redirect, session, send_from_directory, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import mysql.connector
 import os
@@ -30,6 +30,9 @@ from init_db import init_database
 
 # 导入验证函数
 from utils.validators import validate_room_name
+
+# 导入TRTC助手
+from utils.trtc_helper import gen_user_sig
 
 # 导入路由蓝图
 from routes.auth import auth_bp
@@ -70,6 +73,19 @@ def _init_profile_schema():
     ensure_room_location_columns()
 
 # 剩余的路由（房间相关、API等）
+@app.route('/api/trtc/usersig')
+def get_trtc_usersig():
+    """生成TRTC UserSig"""
+    # 接收前端传过来的英文ID
+    user_id = request.args.get("userId", "guest")
+
+    # 生成签名
+    sig = gen_user_sig(user_id)
+    return jsonify({
+        "userSig": sig,
+        "sdkAppId": 1600138234
+    })
+
 @app.route('/room/<id>')
 def room(id):
     if "user" not in session:

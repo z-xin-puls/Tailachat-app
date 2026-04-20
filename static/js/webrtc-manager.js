@@ -38,7 +38,11 @@ async function fetchXirsysCredentials() {
 
         if (data.s === 'ok' && data.v) {
             // Xirsys返回的ICE服务器配置
-            // data.v 包含完整的配置对象，直接使用
+            // data.v.iceServers 可能是单个对象或数组
+            if (!Array.isArray(data.v.iceServers)) {
+                // 如果是单个对象，转换为数组格式
+                data.v.iceServers = [data.v.iceServers];
+            }
             iceServers = data.v;
             console.log('[Xirsys] ✅ 凭据获取成功，ICE服务器已更新');
             console.log('[Xirsys] ICE服务器配置:', iceServers);

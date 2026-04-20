@@ -19,7 +19,7 @@ let iceServers = {
 };
 
 // 获取Xirsys TURN凭据
-async function fetchXirsysCredentials() {
+async function fetchXirsysCredentials(manager) {
     try {
         console.log('[Xirsys] 获取TURN凭据...');
         const basicAuth = btoa(`${XIRSYS_CONFIG.username}:${XIRSYS_CONFIG.secret}`);
@@ -44,6 +44,7 @@ async function fetchXirsysCredentials() {
                 data.v.iceServers = [data.v.iceServers];
             }
             iceServers = data.v;
+            manager.xirsysCredentialsReady = true;  // 标记凭据就绪
             console.log('[Xirsys] ✅ 凭据获取成功，ICE服务器已更新');
             console.log('[Xirsys] ICE服务器配置:', iceServers);
             console.log('[Xirsys] ICE服务器列表:', iceServers.iceServers);
@@ -68,6 +69,7 @@ class WebRTCManager {
         this.socket = null;
         this.voiceEnabled = false;
         this.roomConfig = null;
+        this.xirsysCredentialsReady = false;  // Xirsys凭据是否就绪
     }
 
     // 设置房间配置
@@ -88,7 +90,7 @@ class WebRTCManager {
         }
 
         // 获取Xirsys TURN凭据
-        await fetchXirsysCredentials();
+        await fetchXirsysCredentials(this);
 
         try {
             this.socket = io();
@@ -122,10 +124,15 @@ class WebRTCManager {
                 }
             });
 
-            this.socket.on('user_joined', (data) => {
+            this.socket.on('user_joined', async (data) => {
                 console.log('用户加入:', data.username);
                 // 只有在自己已加入语音房间时，才向新用户发送offer
                 if (this.voiceEnabled) {
+                    // 等待Xirsys凭据就绪
+                    while (!this.xirsysCredentialsReady) {
+                        console.log('[DEBUG] 等待Xirsys凭据就绪...');
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
                     this.createPeerConnection(data.username, true);
                 }
                 if (this.onUserJoinedCallback) {
@@ -142,10 +149,15 @@ class WebRTCManager {
                 }
             });
 
-            this.socket.on('room_users', (data) => {
+            this.socket.on('room_users', async (data) => {
                 console.log('房间用户列表:', data.users);
                 // 只有在自己已加入语音房间时，才与房间内现有用户建立连接
                 if (this.voiceEnabled) {
+                    // 等待Xirsys凭据就绪
+                    while (!this.xirsysCredentialsReady) {
+                        console.log('[DEBUG] 等待Xirsys凭据就绪...');
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
                     for (const username of data.users) {
                         this.createPeerConnection(username, false);
                     }

@@ -24,25 +24,15 @@ class WebRTCManager {
         this.voiceEnabled = enabled;
     }
 
-    // 获取TRTC UserSig（修复版）
+    // 获取TRTC UserSig（测试版 - 使用手动生成的签名）
     async fetchUserSig() {
         try {
-            // 1. 先过滤中文名 → 纯英文
-            let rawUserId = this.roomConfig.currentUser;
-            let safeUserId = rawUserId.replace(/[^\w]/g, "") || "guest";
+            // 使用手动生成的UserSig进行测试
+            this.userSig = "eJwtzE8LgjAcxvH3snPIdJtrQgc1CqGL-UVvsy35JdaYM4LovWfq8fl84fmg4*7gvbRFEQo8jBbjBqUfDm4wct3rzs2hU400BhSK-BBjnywDQqei3wasHpwxFmCMJ3XQ-o3zMBSc0Vk7qIfffV-K5yXOOd2klBZxmSZtdiXufJfCWnfarrM6F01RJcUKfX8qbTEt";
+            this.sdkAppId = 1600138234;
+            this.safeUserId = "guest";
 
-            // 2. 把英文ID传给后端 → 生成正确签名
-            const response = await fetch(`/api/trtc/usersig?userId=${safeUserId}`);
-            if (!response.ok) throw new Error('获取UserSig失败');
-
-            const data = await response.json();
-            this.userSig = data.userSig;
-            this.sdkAppId = data.sdkAppId;
-
-            // 3. 把最终安全ID存起来
-            this.safeUserId = safeUserId;
-
-            console.log('[TRTC] UserSig获取成功');
+            console.log('[TRTC] 使用手动生成的UserSig');
             return true;
         } catch (error) {
             console.error('[TRTC] 获取UserSig失败:', error);

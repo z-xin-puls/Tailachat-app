@@ -1,7 +1,4 @@
-import base64
-import hmac
-import hashlib
-import time
+import TLSSigAPIv2
 
 # TRTC 配置
 TRTC_SDKAPPID = 1600138234
@@ -13,25 +10,7 @@ def gen_user_sig(user_id, expire=86400):
     if not user_id:
         user_id = "guest"
 
-    # TRTC 官方UserSig公式
-    # usersig = hmacsha256(secretkey, (userid + sdkappid + currtime + expire + base64(userid + sdkappid + currtime + expire)))
-    curr_time = int(time.time())
-    
-    # 第一步：拼接字符串
-    string_to_hash = f"{user_id}{TRTC_SDKAPPID}{curr_time}{expire}"
-    
-    # 第二步：base64编码
-    base64_string = base64.b64encode(string_to_hash.encode()).decode()
-    
-    # 第三步：再次拼接
-    string_to_sign = f"{user_id}{TRTC_SDKAPPID}{curr_time}{expire}{base64_string}"
-    
-    # 第四步：HMAC-SHA256
-    sig = hmac.new(
-        TRTC_SECRET_KEY.encode(),
-        string_to_sign.encode(),
-        hashlib.sha256
-    ).digest()
-    
-    user_sig = base64.b64encode(sig).decode()
+    # 使用腾讯云官方库生成UserSig
+    api = TLSSigAPIv2.TLSSigAPIv2(TRTC_SDKAPPID, TRTC_SECRET_KEY)
+    user_sig = api.gen_sig(user_id, expire)
     return user_sig

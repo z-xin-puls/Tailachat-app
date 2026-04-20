@@ -400,19 +400,6 @@ function connectToSignalingServer() {
     webrtcManager.onRemoteStream((stream, username) => {
         playRemoteStream(stream);
     });
-
-    // 设置用户事件回调
-    webrtcManager.onUserJoined((data) => {
-        updateUserList();
-    });
-
-    webrtcManager.onUserLeft((data) => {
-        updateUserList();
-    });
-
-    webrtcManager.onRoomUsers((data) => {
-        updateUserList();
-    });
 }
 
 // 创建对等连接

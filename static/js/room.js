@@ -425,16 +425,13 @@ async function handleIceCandidate(data) {
 
 // 播放远程流
 function playRemoteStream(stream) {
-    console.log(`[DEBUG] playRemoteStream - stream:`, stream);
     const audioElements = document.querySelectorAll('.remote-audio');
     for (const audio of audioElements) {
         if (audio.srcObject === stream) {
-            console.log(`[DEBUG] 音频元素已存在，跳过创建`);
             return;
         }
     }
 
-    console.log(`[DEBUG] 创建新的Audio元素`);
     const audio = new Audio();
     audio.srcObject = stream;
 
@@ -445,12 +442,9 @@ function playRemoteStream(stream) {
     audio.preload = 'auto';           // 改成 auto，不要 metadata
     audio.defaultMuted = false;
 
-    console.log(`[DEBUG] Audio属性设置 - autoplay: ${audio.autoplay}, playsInline: ${audio.playsInline}, muted: ${audio.muted}`);
-
     // 强制激活音频（解决浏览器休眠导致的卡顿）
     audio.oncanplay = () => {
-        console.log(`[DEBUG] oncanplay事件触发，尝试播放音频`);
-        audio.play().catch(err => console.warn('[DEBUG] 音频自动播放需用户交互:', err));
+        audio.play().catch(err => console.warn('音频自动播放需用户交互:', err));
     };
 
     audio.className = 'remote-audio';

@@ -13,15 +13,25 @@ def gen_user_sig(user_id, expire=86400):
     if not user_id:
         user_id = "guest"
 
-    # TRTC 官方专用算法
+    # TRTC 官方UserSig公式
+    # usersig = hmacsha256(secretkey, (userid + sdkappid + currtime + expire + base64(userid + sdkappid + currtime + expire)))
     curr_time = int(time.time())
-    msg = f"{TRTC_SDKAPPID}\n{user_id}\n{curr_time}\n{expire}\n"
     
-    sign = hmac.new(
+    # 第一步：拼接字符串
+    string_to_hash = f"{user_id}{TRTC_SDKAPPID}{curr_time}{expire}"
+    
+    # 第二步：base64编码
+    base64_string = base64.b64encode(string_to_hash.encode()).decode()
+    
+    # 第三步：再次拼接
+    string_to_sign = f"{user_id}{TRTC_SDKAPPID}{curr_time}{expire}{base64_string}"
+    
+    # 第四步：HMAC-SHA256
+    sig = hmac.new(
         TRTC_SECRET_KEY.encode(),
-        msg.encode(),
-        hashlib.sha1
+        string_to_sign.encode(),
+        hashlib.sha256
     ).digest()
     
-    user_sig = base64.b64encode(sign).decode()
+    user_sig = base64.b64encode(sig).decode()
     return user_sig

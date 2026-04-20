@@ -579,15 +579,7 @@ async function handleOffer(data) {
     console.log(`[DEBUG] handleOffer - 发送者: ${sender}, SDP类型: ${sdp.type}`);
     const isNewConnection = !peerConnections[sender];
     console.log(`[DEBUG] 是否新连接: ${isNewConnection}`);
-
-    let pc;
-    if (isNewConnection) {
-        pc = new RTCPeerConnection(iceServers);
-        peerConnections[sender] = pc;
-    } else {
-        pc = peerConnections[sender];
-        console.log(`[DEBUG] 复用现有连接 - 当前signalingState: ${pc.signalingState}`);
-    }
+    const pc = peerConnections[sender] || new RTCPeerConnection(iceServers);
 
     // 只在新建连接时添加本地流
     if (isNewConnection && localStream) {

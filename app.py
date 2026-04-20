@@ -31,6 +31,9 @@ from init_db import init_database
 # 导入验证函数
 from utils.validators import validate_room_name
 
+# 导入TRTC助手
+from utils.trtc_helper import gen_user_sig
+
 # 导入路由蓝图
 from routes.auth import auth_bp
 from routes.main import main_bp
@@ -70,6 +73,21 @@ def _init_profile_schema():
     ensure_room_location_columns()
 
 # 剩余的路由（房间相关、API等）
+@app.route('/api/trtc/usersig')
+def get_trtc_usersig():
+    """生成TRTC UserSig"""
+    if "user" not in session:
+        return {"error": "未登录"}, 401
+
+    user_id = session['user']
+    user_sig = gen_user_sig(user_id)
+
+    return {
+        "userSig": user_sig,
+        "sdkAppId": 1600138234,
+        "userId": user_id
+    }
+
 @app.route('/room/<id>')
 def room(id):
     if "user" not in session:

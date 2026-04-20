@@ -86,6 +86,17 @@ class WebRTCManager {
         try {
             this.socket = io();
 
+            // 应用存储的聊天回调
+            if (this.onChatHistoryCallback) {
+                this.socket.on('chat_history', this.onChatHistoryCallback);
+            }
+            if (this.onChatMessageCallback) {
+                this.socket.on('chat_message', this.onChatMessageCallback);
+            }
+            if (this.onChatErrorCallback) {
+                this.socket.on('chat_error', this.onChatErrorCallback);
+            }
+
             this.socket.on('connect', () => {
                 console.log('Socket.IO连接成功');
                 // 加入聊天房间（页面加载时就加入）
@@ -196,17 +207,29 @@ class WebRTCManager {
 
     // 设置聊天历史回调
     onChatHistory(callback) {
-        this.socket.on('chat_history', callback);
+        if (this.socket) {
+            this.socket.on('chat_history', callback);
+        } else {
+            this.onChatHistoryCallback = callback;
+        }
     }
 
     // 设置聊天消息回调
     onChatMessage(callback) {
-        this.socket.on('chat_message', callback);
+        if (this.socket) {
+            this.socket.on('chat_message', callback);
+        } else {
+            this.onChatMessageCallback = callback;
+        }
     }
 
     // 设置聊天错误回调
     onChatError(callback) {
-        this.socket.on('chat_error', callback);
+        if (this.socket) {
+            this.socket.on('chat_error', callback);
+        } else {
+            this.onChatErrorCallback = callback;
+        }
     }
 
     // 发送聊天消息

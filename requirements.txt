@@ -7,3 +7,4 @@ gunicorn
 gevent
 mysql-connector-python
 cryptography
+tls-sig-api-v2-python

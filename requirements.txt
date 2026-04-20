@@ -6,4 +6,3 @@ requests
 gunicorn
 gevent
 mysql-connector-python
-tls-sig-api-v2-python

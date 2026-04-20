@@ -14,7 +14,7 @@ class WebRTCManager {
 
     // 自动生成合法 UserSig（无后端，100%可用）
     genTestUserSig(userId) {
-        const api = new window.libsignal.TLSSigAPIv2(this.SDKAPPID, this.SECRETKEY);
+        const api = new TRTC.TLSSigAPIv2(this.SDKAPPID, this.SECRETKEY);
         return api.genSig(userId, 86400);
     }
 

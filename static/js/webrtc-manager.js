@@ -161,7 +161,7 @@ class WebRTCManager {
     // 发送聊天消息
     sendChat(message) {
         if (this.socket) {
-            this.socket.emit('chat_message', message);
+            this.socket.emit('send_chat_message', message);
         }
     }
 

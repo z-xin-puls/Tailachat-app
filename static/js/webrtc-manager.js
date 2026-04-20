@@ -24,15 +24,15 @@ class WebRTCManager {
         this.voiceEnabled = enabled;
     }
 
-    // 获取TRTC UserSig（测试版 - 使用手动生成的签名）
+    // 获取TRTC UserSig（使用腾讯云控制台生成的官方签名）
     async fetchUserSig() {
         try {
-            // 使用手动生成的UserSig进行测试
+            // 使用腾讯云控制台生成的官方UserSig
             this.userSig = "eJwtzE8LgjAcxvH3snPIdJtrQgc1CqGL-UVvsy35JdaYM4LovWfq8fl84fmg4*7gvbRFEQo8jBbjBqUfDm4wct3rzs2hU400BhSK-BBjnywDQqei3wasHpwxFmCMJ3XQ-o3zMBSc0Vk7qIfffV-K5yXOOd2klBZxmSZtdiXufJfCWnfarrM6F01RJcUKfX8qbTEt";
             this.sdkAppId = 1600138234;
             this.safeUserId = "guest";
 
-            console.log('[TRTC] 使用手动生成的UserSig');
+            console.log('[TRTC] 使用腾讯云控制台生成的官方UserSig');
             return true;
         } catch (error) {
             console.error('[TRTC] 获取UserSig失败:', error);

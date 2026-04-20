@@ -282,6 +282,24 @@ class WebRTCManager {
 
         this.peerConnections[username] = pc;
         console.log('创建对等连接:', username);
+
+        if (isInitiator) {
+            // 创建并发送offer
+            pc.createOffer().then(offer => {
+                console.log('创建offer:', offer);
+                return pc.setLocalDescription(offer);
+            }).then(() => {
+                console.log('发送offer给', username);
+                this.socket.emit('webrtc_offer', {
+                    sdp: pc.localDescription,
+                    target: username,
+                    sender: this.roomConfig.currentUser
+                });
+            }).catch(error => {
+                console.error('创建offer失败:', error);
+            });
+        }
+
         return pc;
     }
 

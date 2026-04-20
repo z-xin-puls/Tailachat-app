@@ -405,20 +405,7 @@ function connectToSignalingServer() {
 // 创建对等连接
 async function createPeerConnection(username, isInitiator) {
     webrtcManager.setLocalStream(localStream);
-    const pc = webrtcManager.createPeerConnection(username, isInitiator);
-
-    if (isInitiator) {
-        // 创建并发送offer
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        webrtcManager.getSocket().emit('webrtc_offer', {
-            sdp: offer,
-            target: username,
-            sender: ROOM_CONFIG.currentUser
-        });
-    }
-
-    return pc;
+    webrtcManager.createPeerConnection(username, isInitiator);
 }
 
 // 处理offer（webrtc-manager已处理）

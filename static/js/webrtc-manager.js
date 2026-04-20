@@ -24,18 +24,26 @@ class WebRTCManager {
         this.voiceEnabled = enabled;
     }
 
-    // 获取TRTC UserSig（使用腾讯云控制台生成的官方签名）
+    // 获取TRTC UserSig
     async fetchUserSig() {
         try {
-            // 使用腾讯云控制台生成的官方UserSig
-            this.userSig = "eJwtzE8LgjAcxvH3snPIdJtrQgc1CqGL-UVvsy35JdaYM4LovWfq8fl84fmg4*7gvbRFEQo8jBbjBqUfDm4wct3rzs2hU400BhSK-BBjnywDQqei3wasHpwxFmCMJ3XQ-o3zMBSc0Vk7qIfffV-K5yXOOd2klBZxmSZtdiXufJfCWnfarrM6F01RJcUKfX8qbTEt";
-            this.sdkAppId = 1600138234;
-            this.safeUserId = "guest";
+            // 为每个设备生成唯一userId（基于用户名+时间戳）
+            const timestamp = Date.now();
+            let rawUserId = this.roomConfig.currentUser;
+            let safeUserId = (rawUserId.replace(/[^\w]/g, "") || "user") + "_" + timestamp;
 
-            console.log('[TRTC] 使用腾讯云控制台生成的官方UserSig');
+            // 调用后端接口获取UserSig
+            let res = await fetch(`/api/trtc/usersig?userId=${safeUserId}`);
+            let data = await res.json();
+
+            this.userSig = data.userSig;
+            this.sdkAppId = 1600138234;
+            this.safeUserId = safeUserId;
+
+            console.log('[TRTC] 从后端获取 UserSig 成功, userId:', safeUserId);
             return true;
         } catch (error) {
-            console.error('[TRTC] 获取UserSig失败:', error);
+            console.error('[TRTC] 获取 UserSig 失败', error);
             return false;
         }
     }
@@ -176,6 +184,8 @@ class WebRTCManager {
             this.trtcClient.on(TRTC.EVENT.REMOTE_AUDIO_AVAILABLE, (event) => {
                 const { userId, stream } = event;
                 console.log('[TRTC] 收到远程音频流:', userId);
+                // 订阅远程音频
+                this.trtcClient.muteRemoteAudio(userId, false);
                 if (this.onRemoteStreamCallback) {
                     this.onRemoteStreamCallback(stream, userId);
                 }
@@ -192,6 +202,13 @@ class WebRTCManager {
                 const { userId } = event;
                 console.log('[TRTC] 用户离开:', userId);
                 delete this.remoteStreams[userId];
+            });
+
+            this.trtcClient.on(TRTC.EVENT.USER_JOIN, (event) => {
+                const { userId } = event;
+                console.log('[TRTC] 用户加入:', userId);
+                // 订阅远程用户的音频
+                this.trtcClient.muteRemoteAudio(userId, false);
             });
 
             this.trtcClient.on(TRTC.EVENT.ERROR, (error) => {

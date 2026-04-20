@@ -454,9 +454,33 @@ function playRemoteStream(stream) {
     };
 
     audio.className = 'remote-audio';
-    audio.style.display = 'none';
     document.body.appendChild(audio);
-    console.log(`[DEBUG] Audio元素已添加到DOM`);
+}
+
+// 显示通知
+function showNotification(message) {
+    // 创建通知元素
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #4CAF50;
+        color: white;
+        padding: 12px 24px;
+        border-radius: 4px;
+        z-index: 10000;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        animation: slideIn 0.3s ease-out;
+    `;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+
+    // 3秒后自动消失
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
 }
 
 // 关闭对等连接
@@ -501,6 +525,9 @@ async function startVoiceClient() {
         console.log('加入语音房间...');
         webrtcManager.joinVoiceRoom();
 
+        // 显示会议通话开启提示
+        showNotification('语音通话已开启');
+
         // 强制浏览器不休眠音频（超级关键）
         document.body.addEventListener('click', () => {
             console.log('强制激活所有远程音频...');
@@ -528,8 +555,19 @@ function stopVoiceClient() {
         localStream = null;
     }
 
+    // 清理所有远程音频元素
+    document.querySelectorAll('.remote-audio').forEach(audio => {
+        if (audio.srcObject) {
+            audio.srcObject.getTracks().forEach(track => track.stop());
+        }
+        audio.remove();
+    });
+
     // 离开语音房间
     webrtcManager.leaveVoiceRoom();
+
+    // 显示会议通话关闭提示
+    showNotification('语音通话已结束');
 
     updateVoiceButton(false);
 }

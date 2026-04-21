@@ -35,7 +35,7 @@ def log_user_action(user_id=None, username=None, action_type=None, action_detail
 
         # 记录到user_log表（保持兼容性）
         cursor.execute("""
-            INSERT INTO user_log (user_id, username, action_type, action_detail, ip, user_agent, created_at)
+            INSERT INTO user_log (user_id, username, action_type, action_detail, ip, user_agent, created)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
         """, (user_id, username, action_type, detail_json, ip, user_agent, datetime.now()))
 

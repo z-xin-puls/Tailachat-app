@@ -4,7 +4,12 @@ from config import DB_CONFIG
 
 def get_db_connection():
     """获取数据库连接"""
-    return mysql.connector.connect(**DB_CONFIG)
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    cursor.execute("SET time_zone = '+08:00'")
+    conn.commit()
+    cursor.close()
+    return conn
 
 def ensure_user_profile_columns():
     """确保用户表有头像和昵称字段"""

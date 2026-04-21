@@ -116,19 +116,29 @@
                 <div class="stat-value">{{ total_users }}</div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">🔐</div>
-                <div class="stat-label">管理员数</div>
-                <div class="stat-value">{{ admin_count }}</div>
+                <div class="stat-icon">🟢</div>
+                <div class="stat-label">当前在线</div>
+                <div class="stat-value">{{ online_users }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-label">今日活跃</div>
+                <div class="stat-value">{{ today_active_users }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon">🏠</div>
-                <div class="stat-label">房间数</div>
-                <div class="stat-value">{{ total_rooms }}</div>
+                <div class="stat-label">活跃房间</div>
+                <div class="stat-value">{{ active_rooms }}</div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">🏰</div>
-                <div class="stat-label">据点数</div>
-                <div class="stat-value">{{ total_fortresses }}</div>
+                <div class="stat-icon">➕</div>
+                <div class="stat-label">今日创建房间</div>
+                <div class="stat-value">{{ today_created_rooms }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🔐</div>
+                <div class="stat-label">管理员数</div>
+                <div class="stat-value">{{ admin_count }}</div>
             </div>
         </div>
         

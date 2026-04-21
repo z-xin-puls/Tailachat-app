@@ -169,6 +169,14 @@ class WebRTCManager {
     async joinVoiceRoom() {
         console.log('[TRTC] 加入语音房间');
 
+        // 发送Socket.IO事件触发后端记录
+        if (this.socket) {
+            this.socket.emit('join_voice_room', {
+                room_id: this.roomConfig.roomId,
+                username: this.roomConfig.currentUser
+            });
+        }
+
         // 获取UserSig
         const success = await this.fetchUserSig();
         if (!success) {
@@ -240,6 +248,14 @@ class WebRTCManager {
     // 离开语音房间
     async leaveVoiceRoom() {
         console.log('[TRTC] 离开语音房间');
+
+        // 发送Socket.IO事件触发后端记录
+        if (this.socket) {
+            this.socket.emit('leave_voice_room', {
+                room_id: this.roomConfig.roomId,
+                username: this.roomConfig.currentUser
+            });
+        }
 
         if (this.trtcClient) {
             try {

@@ -4,12 +4,14 @@ from models.database import get_db_connection
 def init_database():
     """初始化数据库表结构"""
     try:
+        print("正在连接数据库...")
         db = get_db_connection()
         cursor = db.cursor()
 
         # 检查表是否已存在
         cursor.execute("SHOW TABLES")
         existing_tables = [table[0] for table in cursor.fetchall()]
+        print(f"现有表: {existing_tables}")
 
         # 创建 users 表
         if 'users' not in existing_tables:
@@ -65,8 +67,39 @@ def init_database():
             """)
             print("✅ 创建 user_log 表")
 
+        # 创建 user_activity 表 - 用户活动统计
+        if 'user_activity' not in existing_tables:
+            cursor.execute("""
+                CREATE TABLE user_activity (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    username VARCHAR(50) NOT NULL,
+                    action VARCHAR(20) NOT NULL,
+                    timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    ip VARCHAR(50) NULL DEFAULT NULL,
+                    FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+                )
+            """)
+            print("✅ 创建 user_activity 表")
+
+        # 创建 room_activity 表 - 房间活动统计
+        if 'room_activity' not in existing_tables:
+            cursor.execute("""
+                CREATE TABLE room_activity (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    room_id INT NOT NULL,
+                    room_name VARCHAR(100) NOT NULL,
+                    action VARCHAR(20) NOT NULL,
+                    owner VARCHAR(50) NOT NULL,
+                    timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
+                    FOREIGN KEY (owner) REFERENCES users(username) ON DELETE CASCADE
+                )
+            """)
+            print("✅ 创建 room_activity 表")
+
         db.commit()
         db.close()
+        print("✅ 数据库初始化完成")
         return True
     except Exception as e:
         print(f"❌ 数据库初始化失败: {e}")

@@ -86,6 +86,29 @@ def get_trtc_usersig():
         "sdkAppId": 1600138234
     })
 
+@app.route('/api/admin/realtime-stats')
+def get_realtime_stats():
+    """获取实时统计数据"""
+    # 计算在线用户数
+    online_users = 0
+    active_rooms = 0
+
+    # 统计语音房间用户
+    for room_id, users in socket_room_users.items():
+        online_users += len(users)
+        active_rooms += 1
+
+    # 统计房间页面用户（去重）
+    page_users = set()
+    for room_id, users in room_users.items():
+        page_users.update(users)
+
+    return jsonify({
+        "online_users": online_users,
+        "active_rooms": active_rooms,
+        "page_users": len(page_users)
+    })
+
 @app.route('/room/<id>')
 def room(id):
     if "user" not in session:
@@ -235,6 +258,21 @@ room_users = {}  # {room_id: set(username)} - 房间页面用户
 
 # 存储用户名到sid的映射 {room_id: {username: sid}}
 username_to_sid = {}
+
+def get_realtime_stats():
+    """获取实时统计数据"""
+    online_users = 0
+    active_rooms = 0
+    
+    # 统计语音房间用户
+    for room_id, users in socket_room_users.items():
+        online_users += len(users)
+        active_rooms += 1
+    
+    return {
+        'online_users': online_users,
+        'active_rooms': active_rooms
+    }
 
 @socketio.on('connect')
 def handle_connect():

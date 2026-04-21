@@ -3,6 +3,7 @@ from flask import Blueprint, request, redirect, render_template, session, jsonif
 from models.database import get_db_connection
 from models.user import get_user_profiles, get_user_role
 from models.room import get_all_rooms
+from models.analytics import get_dashboard_stats
 from utils.decorators import admin_required
 from utils.helpers import html_escape
 
@@ -12,39 +13,31 @@ admin_bp = Blueprint('admin', __name__)
 @admin_required
 def admin_dashboard():
     """管理员面板主页"""
-    # 获取统计信息
+    # 获取实时在线用户数
+    online_users = 0
+    active_rooms = 0
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # 用户统计
-        cursor.execute("SELECT COUNT(*) FROM users")
-        total_users = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
-        admin_count = cursor.fetchone()[0]
-        
-        # 房间统计
-        cursor.execute("SELECT COUNT(*) FROM rooms")
-        total_rooms = cursor.fetchone()[0]
-        
-        # 据点统计
-        cursor.execute("SELECT COUNT(*) FROM fortresses")
-        total_fortresses = cursor.fetchone()[0]
-        
-        conn.close()
+        from app import get_realtime_stats
+        stats = get_realtime_stats()
+        online_users = stats['online_users']
+        active_rooms = stats['active_rooms']
     except Exception as e:
-        print(f"获取统计信息失败: {e}")
-        total_users = 0
-        admin_count = 0
-        total_rooms = 0
-        total_fortresses = 0
+        print(f"获取实时统计失败: {e}")
+        online_users = 0
+        active_rooms = 0
+    
+    # 获取统计信息
+    stats = get_dashboard_stats(online_users=online_users, active_rooms=active_rooms)
     
     return render_template('admin/dashboard.html',
-                         total_users=total_users,
-                         admin_count=admin_count,
-                         total_rooms=total_rooms,
-                         total_fortresses=total_fortresses)
+                         total_users=stats['total_users'],
+                         admin_count=stats['admin_count'],
+                         total_rooms=stats['total_rooms'],
+                         total_fortresses=stats['total_fortresses'],
+                         online_users=stats['online_users'],
+                         today_active_users=stats['today_active_users'],
+                         active_rooms=stats['active_rooms'],
+                         today_created_rooms=stats['today_created_rooms'])
 
 @admin_bp.route('/admin/users')
 @admin_required

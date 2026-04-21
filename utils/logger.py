@@ -33,10 +33,26 @@ def log_user_action(user_id=None, username=None, action_type=None, action_detail
         # 将action_detail字典转为JSON字符串
         detail_json = json.dumps(action_detail) if action_detail else None
 
+        # 记录到user_log表（保持兼容性）
         cursor.execute("""
             INSERT INTO user_log (user_id, username, action_type, action_detail, ip, user_agent, created_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
         """, (user_id, username, action_type, detail_json, ip, user_agent, datetime.now()))
+
+        # 记录到user_activity表（用于统计分析）
+        # 先检查用户是否存在（支持username和nickname）
+        if username:
+            cursor.execute("SELECT username FROM users WHERE username = %s OR nickname = %s", (username, username))
+            result = cursor.fetchone()
+            if result:
+                # 使用数据库中的真实username
+                real_username = result[0]
+                cursor.execute("""
+                    INSERT INTO user_activity (username, action, ip)
+                    VALUES (%s, %s, %s)
+                """, (real_username, action_type, ip))
+            else:
+                print(f"用户 {username} 不存在于users表，跳过记录到user_activity")
 
         db.commit()
         db.close()

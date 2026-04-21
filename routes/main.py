@@ -101,6 +101,19 @@ def create_fortress_room():
         user_agent=request.headers.get('User-Agent')
     )
 
+    # 记录房间活动到room_activity表
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO room_activity (room_id, room_name, action, owner)
+            VALUES (%s, %s, %s, %s)
+        """, (room_id, name, 'create', session['user']))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"记录房间活动失败: {e}")
+
     return "success", 200
 
 @main_bp.route('/api/fortress_rooms/<int:fortress_id>')

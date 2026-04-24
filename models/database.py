@@ -31,24 +31,3 @@ def ensure_user_profile_columns():
             db.close()
         except:
             pass
-
-def ensure_room_location_columns():
-    """确保房间表有位置字段"""
-    try:
-        db = get_db_connection()
-        cursor = db.cursor()
-        cursor.execute("SHOW COLUMNS FROM rooms LIKE 'x'")
-        has_x = cursor.fetchone() is not None
-        cursor.execute("SHOW COLUMNS FROM rooms LIKE 'y'")
-        has_y = cursor.fetchone() is not None
-        if not has_x:
-            cursor.execute("ALTER TABLE rooms ADD COLUMN x FLOAT NULL DEFAULT NULL")
-        if not has_y:
-            cursor.execute("ALTER TABLE rooms ADD COLUMN y FLOAT NULL DEFAULT NULL")
-        db.commit()
-        db.close()
-    except:
-        try:
-            db.close()
-        except:
-            pass

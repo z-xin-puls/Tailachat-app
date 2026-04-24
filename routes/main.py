@@ -148,27 +148,3 @@ def get_fortress_rooms(fortress_id):
     except Exception as e:
         print(f"获取据点房间失败: {e}")
         return jsonify({'error': str(e)}), 500
-
-@main_bp.route('/create_with_location', methods=['POST'])
-def create_with_location():
-    if "user" not in session: 
-        return "error", 401
-    
-    name = request.form['name']
-    x = float(request.form['x'])
-    y = float(request.form['y'])
-    
-    room_id, error = create_room(name, session['user'], x, y)
-    if error:
-        return "error", 400
-
-    # 记录创建房间日志
-    log_user_action(
-        username=session['user'],
-        action_type='create_room',
-        action_detail={'room_id': room_id, 'room_name': name, 'x': x, 'y': y},
-        ip=request.remote_addr,
-        user_agent=request.headers.get('User-Agent')
-    )
-
-    return "success", 200

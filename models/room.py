@@ -11,7 +11,7 @@ def get_all_rooms():
     db.close()
     return rooms
 
-def create_room(name, owner, x=None, y=None):
+def create_room(name, owner):
     """创建房间"""
     error = validate_room_name(name)
     if error:
@@ -20,11 +20,7 @@ def create_room(name, owner, x=None, y=None):
     db = get_db_connection()
     cursor = db.cursor()
     
-    if x is not None and y is not None:
-        cursor.execute("INSERT INTO rooms (name, owner, x, y) VALUES (%s, %s, %s, %s)", 
-                       (name, owner, x, y))
-    else:
-        cursor.execute("INSERT INTO rooms (name, owner) VALUES (%s, %s)", (name, owner))
+    cursor.execute("INSERT INTO rooms (name, owner) VALUES (%s, %s)", (name, owner))
     
     db.commit()
     room_id = cursor.lastrowid

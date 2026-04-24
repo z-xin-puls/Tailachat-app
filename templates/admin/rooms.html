@@ -124,7 +124,6 @@
                         <th>ID</th>
                         <th>房间名称</th>
                         <th>创建者</th>
-                        <th>坐标</th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -134,13 +133,6 @@
                         <td>{{ room.id }}</td>
                         <td>{{ room.name }}</td>
                         <td>{{ room.owner }}</td>
-                        <td>
-                            {% if room.x is not none and room.y is not none %}
-                            ({{ room.x }}, {{ room.y }})
-                            {% else %}
-                            -
-                            {% endif %}
-                        </td>
                         <td>
                             <button class="action-btn btn-delete" onclick="deleteRoom({{ room.id }}, '{{ room.name }}')">删除</button>
                         </td>

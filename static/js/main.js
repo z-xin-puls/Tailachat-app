@@ -136,17 +136,6 @@ document.addEventListener('mouseup', function() {
 
 // 地图点击功能已移除，房间创建改为在据点弹窗中进行
 
-function openCreateModal() {
-    document.getElementById('modalOverlay').style.display = 'block';
-    document.getElementById('createModal').style.display = 'block';
-}
-
-function closeCreateModal() {
-    document.getElementById('modalOverlay').style.display = 'none';
-    document.getElementById('createModal').style.display = 'none';
-    document.getElementById('createForm').reset();
-}
-
 // 据点创建房间表单提交
 document.getElementById('fortressCreateForm').addEventListener('submit', function(e) {
     e.preventDefault();
@@ -178,21 +167,6 @@ document.getElementById('fortressCreateForm').addEventListener('submit', functio
     .catch(error => {
         console.error('创建房间失败:', error);
         alert('创建房间失败，请重试');
-    });
-});
-
-document.getElementById('createForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    var formData = new FormData(e.target);
-    
-    fetch('/create_with_location', {
-        method: 'POST',
-        body: formData
-    }).then(function(response) {
-        if (response.ok) {
-            closeCreateModal();
-            window.location.reload();
-        }
     });
 });
 

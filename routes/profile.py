@@ -6,8 +6,85 @@ from utils.helpers import html_escape
 from config import DEFAULT_AVATARS, ALLOWED_IMAGE_EXTS, AVATAR_DIR
 import os
 from datetime import datetime
+from PIL import Image
+import io
 
 profile_bp = Blueprint('profile', __name__)
+
+# 头像配置
+MAX_AVATAR_SIZE = 500  # 最大尺寸500x500
+AVATAR_QUALITY = 85    # JPEG质量85%
+
+def compress_avatar(image_file, skip_compression=False):
+    """压缩头像图片
+    
+    Args:
+        image_file: 图片文件对象
+        skip_compression: 是否跳过压缩（前端已裁剪的图片）
+    """
+    try:
+        img = Image.open(image_file)
+        
+        # 如果前端已经裁剪过，直接保存为JPEG
+        if skip_compression:
+            output = io.BytesIO()
+            if img.mode in ('RGBA', 'P'):
+                img = img.convert('RGB')
+            img.save(output, format='JPEG', quality=AVATAR_QUALITY, optimize=True)
+            output.seek(0)
+            return output
+        
+        # 转换为RGB（处理RGBA图片）
+        if img.mode in ('RGBA', 'P'):
+            img = img.convert('RGB')
+        
+        # 计算缩放比例
+        width, height = img.size
+        if width > MAX_AVATAR_SIZE or height > MAX_AVATAR_SIZE:
+            ratio = min(MAX_AVATAR_SIZE / width, MAX_AVATAR_SIZE / height)
+            new_width = int(width * ratio)
+            new_height = int(height * ratio)
+            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        # 保存到内存
+        output = io.BytesIO()
+        img.save(output, format='JPEG', quality=AVATAR_QUALITY, optimize=True)
+        output.seek(0)
+        
+        return output
+    except Exception as e:
+        print(f"图片压缩失败: {e}")
+        raise
+
+def delete_old_avatar(username, new_avatar_path=None):
+    """删除用户的旧头像文件
+    
+    Args:
+        username: 用户名
+        new_avatar_path: 新头像路径（用于避免删除与旧头像相同的文件）
+    """
+    try:
+        db = get_db_connection()
+        cursor = db.cursor()
+        cursor.execute("SELECT avatar FROM users WHERE username=%s", (username,))
+        result = cursor.fetchone()
+        db.close()
+        
+        if result and result[0]:
+            old_avatar = result[0]
+            # 只删除自定义上传的头像（以/avatars/开头的）
+            if old_avatar.startswith('/avatars/'):
+                # 避免删除新上传的文件（如果新旧路径相同）
+                if new_avatar_path and old_avatar == new_avatar_path:
+                    return
+                    
+                filename = old_avatar[len('/avatars/'):]
+                old_path = os.path.join(AVATAR_DIR, filename)
+                if os.path.exists(old_path):
+                    os.remove(old_path)
+                    print(f"已删除旧头像: {filename}")
+    except Exception as e:
+        print(f"删除旧头像失败: {e}")
 
 @profile_bp.route('/avatars/<path:filename>')
 def serve_avatar(filename):
@@ -47,6 +124,7 @@ def profile():
     <head>
         <meta charset="utf-8">
         <title>泰拉通讯 - 个人中心</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
         <style>
             *{{margin:0;padding:0;box-sizing:border-box}}
             body{{background:#0a0a0f url('/static/images/namecard/nc_taiko/bg.png') center/cover no-repeat fixed;color:#e5e7eb;font-family:Segoe UI,微软雅黑;min-height:100vh;position:relative;overflow:hidden}}
@@ -75,20 +153,20 @@ def profile():
             .avatar-module-bg{{width:100%;height:auto;display:block}}
             .avatar-module-content{{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;gap:24px;padding:32px;background:transparent}}
             .modal{{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:9999}}
-            .modal-content{{position:relative;background:rgba(26,16,37,0.9);border:1px solid rgba(255,85,85,0.3);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4),0 0 24px rgba(255,85,85,0.15);max-width:600px;margin:50px auto;padding:0;backdrop-filter:blur(20px)}}
-            .modal-header{{padding:20px 24px;border-bottom:1px solid rgba(255,85,85,0.3);display:flex;justify-content:space-between;align-items:center}}
-            .modal-title{{color:#FF5555;font-size:18px;font-weight:900;margin:0}}
-            .modal-close{{background:transparent;border:none;color:#9ca3af;font-size:24px;cursor:pointer;padding:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:8px}}
+            .modal-content{{position:relative;background:rgba(26,16,37,0.9);border:1px solid rgba(255,85,85,0.3);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4),0 0 24px rgba(255,85,85,0.15);max-width:600px;max-height:90vh;margin:5vh auto;padding:0;backdrop-filter:blur(20px);overflow-y:auto}}
+            .modal-header{{padding:16px 20px;border-bottom:1px solid rgba(255,85,85,0.3);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:rgba(26,16,37,0.95);z-index:10}}
+            .modal-title{{color:#FF5555;font-size:16px;font-weight:900;margin:0}}
+            .modal-close{{background:transparent;border:none;color:#9ca3af;font-size:24px;cursor:pointer;padding:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:8px}}
             .modal-close:hover{{background:rgba(255,85,85,0.2);color:#e5e7eb}}
-            .modal-body{{padding:24px}}
-            .avatar-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}}
-            .avatar-option{{cursor:pointer;border:2px solid rgba(255,85,85,0.3);border-radius:12px;overflow:hidden;aspect-ratio:1;transition:all 0.3s ease;position:relative;backdrop-filter:blur(10px)}}
+            .modal-body{{padding:16px 20px}}
+            .avatar-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}}
+            .avatar-option{{cursor:pointer;border:2px solid rgba(255,85,85,0.3);border-radius:10px;overflow:hidden;aspect-ratio:1;transition:all 0.3s ease;position:relative;backdrop-filter:blur(10px)}}
             .avatar-option:hover{{border-color:rgba(255,85,85,0.6)}}
             .avatar-option.selected{{border-color:rgba(255,85,85,0.8);box-shadow:0 0 0 3px rgba(255,85,85,0.2)}}
             .avatar-option img{{width:100%;height:100%;object-fit:cover;display:block}}
-            .upload-section{{border-top:1px solid rgba(255,85,85,0.3);padding-top:20px}}
-            .upload-btn{{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:16px}}
-            .hint{{color:#9ca3af;font-size:12px;margin-top:4px}}
+            .upload-section{{border-top:1px solid rgba(255,85,85,0.3);padding-top:16px}}
+            .upload-btn{{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;flex-wrap:wrap}}
+            .hint{{color:#9ca3af;font-size:11px;margin-top:4px}}
         </style>
     </head>
     <body>
@@ -150,18 +228,44 @@ def profile():
                             <img src="{av}" alt="avatar_{i+1}">
                         </div>''' for i, av in enumerate(DEFAULT_AVATARS)])}
                     </div>
-                    <div class="upload-section">
+                    <div class="upload-btn" style="margin-top:16px;">
+                        <button class="sidebar-btn" onclick="saveDefaultAvatar()">保存头像</button>
+                        <button class="sidebar-ghost-btn" onclick="closeAvatarModal()">取消</button>
+                    </div>
+                    <div class="upload-section" style="margin-top:16px;">
                         <div class="sidebar-label">或上传自定义头像</div>
-                        <input type="file" id="avatarFile" accept=".png,.jpg,.jpeg,.gif,.webp" style="margin-top:8px;color:#cbd5e1">
+                        <button class="sidebar-btn" onclick="openCustomAvatarModal()" style="margin-top:8px;">上传自定义头像</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 自定义头像上传弹窗 -->
+        <div id="customAvatarModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">上传自定义头像</h3>
+                    <button class="modal-close" onclick="closeCustomAvatarModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <input type="file" id="customAvatarFile" accept=".png,.jpg,.jpeg,.gif,.webp" style="color:#cbd5e1" onchange="previewCustomAvatar(this)">
+                    
+                    <div id="customPreviewContainer" style="display:none;margin-top:16px;">
+                        <div class="sidebar-label">预览与裁剪</div>
+                        <div style="position:relative;width:100%;max-width:400px;height:300px;background:rgba(0,0,0,0.3);border-radius:10px;overflow:hidden;margin-bottom:12px;">
+                            <img id="customAvatarPreview" style="max-width:100%;display:block;">
+                        </div>
                         <div class="upload-btn">
-                            <button class="sidebar-btn" onclick="saveAvatar()">保存头像</button>
-                            <button class="sidebar-ghost-btn" onclick="closeAvatarModal()">取消</button>
+                            <button class="sidebar-btn" onclick="saveCustomAvatar()" style="flex:1">保存头像</button>
+                            <button class="sidebar-ghost-btn" onclick="resetCustomAvatar()" style="flex:1">重新选择</button>
+                            <button class="sidebar-ghost-btn" onclick="closeCustomAvatarModal()" style="flex:1">取消</button>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
     <script>
         function toggleSidebar() {{
             const sidebar = document.getElementById('sidebar');
@@ -186,6 +290,7 @@ def profile():
         }});
         
         let selectedAvatar = '{avatar}';
+        let customCropper = null;
         
         function openAvatarModal() {{
             document.getElementById('avatarModal').style.display = 'block';
@@ -203,21 +308,8 @@ def profile():
             selectedAvatar = avatarUrl;
         }}
         
-        function saveAvatar() {{
-            const fileInput = document.getElementById('avatarFile');
-            
-            if (fileInput.files && fileInput.files[0]) {{
-                const formData = new FormData();
-                formData.append('avatar', fileInput.files[0]);
-                
-                fetch('/update_avatar', {{
-                    method: 'POST',
-                    body: formData
-                }}).then(() => {{
-                    closeAvatarModal();
-                    window.location.reload();
-                }});
-            }} else if (selectedAvatar && selectedAvatar !== '{avatar}') {{
+        function saveDefaultAvatar() {{
+            if (selectedAvatar && selectedAvatar !== '{avatar}') {{
                 const formData = new FormData();
                 formData.append('default_avatar', selectedAvatar);
                 
@@ -231,10 +323,95 @@ def profile():
             }}
         }}
         
+        function openCustomAvatarModal() {{
+            document.getElementById('customAvatarModal').style.display = 'block';
+            closeAvatarModal();
+        }}
+        
+        function closeCustomAvatarModal() {{
+            document.getElementById('customAvatarModal').style.display = 'none';
+            if (customCropper) {{
+                customCropper.destroy();
+                customCropper = null;
+            }}
+        }}
+        
+        function previewCustomAvatar(input) {{
+            if (input.files && input.files[0]) {{
+                const reader = new FileReader();
+                reader.onload = function(e) {{
+                    const preview = document.getElementById('customAvatarPreview');
+                    preview.src = e.target.result;
+                    document.getElementById('customPreviewContainer').style.display = 'block';
+                    input.style.display = 'none';
+                    
+                    // 初始化裁剪器
+                    if (customCropper) {{
+                        customCropper.destroy();
+                    }}
+                    customCropper = new Cropper(preview, {{
+                        aspectRatio: 1,
+                        viewMode: 1,
+                        dragMode: 'move',
+                        autoCropArea: 0.8,
+                        restore: false,
+                        guides: true,
+                        center: true,
+                        highlight: true,
+                        cropBoxMovable: true,
+                        cropBoxResizable: true,
+                        toggleDragModeOnDblclick: false
+                    }});
+                }};
+                reader.readAsDataURL(input.files[0]);
+            }}
+        }}
+        
+        function resetCustomAvatar() {{
+            document.getElementById('customAvatarFile').value = '';
+            document.getElementById('customPreviewContainer').style.display = 'none';
+            document.getElementById('customAvatarFile').style.display = 'block';
+            if (customCropper) {{
+                customCropper.destroy();
+                customCropper = null;
+            }}
+        }}
+        
+        function saveCustomAvatar() {{
+            if (customCropper) {{
+                // 获取裁剪后的画布
+                const canvas = customCropper.getCroppedCanvas({{
+                    width: 500,
+                    height: 500,
+                    imageSmoothingEnabled: true,
+                    imageSmoothingQuality: 'high'
+                }});
+                
+                // 转换为Blob
+                canvas.toBlob(function(blob) {{
+                    const formData = new FormData();
+                    formData.append('avatar', blob, 'avatar.jpg');
+                    formData.append('cropped', 'true');  // 标记为前端已裁剪
+                    
+                    fetch('/update_avatar', {{
+                        method: 'POST',
+                        body: formData
+                    }}).then(() => {{
+                        closeCustomAvatarModal();
+                        window.location.reload();
+                    }});
+                }}, 'image/jpeg', 0.85);
+            }}
+        }}
+        
         window.onclick = function(event) {{
             const modal = document.getElementById('avatarModal');
             if (event.target === modal) {{
                 closeAvatarModal();
+            }}
+            const customModal = document.getElementById('customAvatarModal');
+            if (event.target === customModal) {{
+                closeCustomAvatarModal();
             }}
         }}
     </script>
@@ -249,11 +426,14 @@ def update_avatar():
     username = session["user"]
 
     avatar_path = None
+    old_avatar_deleted = False
     
     # 检查是否选择了默认头像
     if "default_avatar" in request.form:
         default_avatar = request.form["default_avatar"]
         if default_avatar in DEFAULT_AVATARS:
+            # 删除旧的自定义头像
+            delete_old_avatar(username, new_avatar_path=default_avatar)
             avatar_path = default_avatar
     
     # 检查是否上传了自定义头像
@@ -262,20 +442,48 @@ def update_avatar():
         if f and f.filename:
             _, ext = os.path.splitext(f.filename.lower())
             if ext in ALLOWED_IMAGE_EXTS:
-                ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
-                safe_user = "".join([c for c in username if c.isalnum() or c in ("_", "-")])[:30] or "u"
-                filename = f"u_{safe_user}_{ts}{ext}"
-                save_path = os.path.join(AVATAR_DIR, filename)
-                f.save(save_path)
-                avatar_path = f"/avatars/{filename}"
+                try:
+                    # 检查是否为前端裁剪的图片
+                    is_cropped = request.form.get("cropped") == "true"
+                    
+                    # 压缩图片（前端裁剪的跳过压缩）
+                    compressed = compress_avatar(f, skip_compression=is_cropped)
+                    
+                    ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
+                    safe_user = "".join([c for c in username if c.isalnum() or c in ("_", "-")])[:30] or "u"
+                    filename = f"u_{safe_user}_{ts}.jpg"  # 统一保存为JPEG
+                    save_path = os.path.join(AVATAR_DIR, filename)
+                    
+                    # 保存压缩后的图片
+                    with open(save_path, 'wb') as out_file:
+                        out_file.write(compressed.getvalue())
+                    
+                    avatar_path = f"/avatars/{filename}"
+                except Exception as e:
+                    print(f"头像处理失败: {e}")
+                    return "error", 500
 
     if avatar_path:
-        db = get_db_connection()
-        cursor = db.cursor()
-        cursor.execute("UPDATE users SET avatar=%s WHERE username=%s", (avatar_path, username))
-        db.commit()
-        db.close()
-        clear_user_profile_cache(username)
+        try:
+            db = get_db_connection()
+            cursor = db.cursor()
+            cursor.execute("UPDATE users SET avatar=%s WHERE username=%s", (avatar_path, username))
+            db.commit()
+            db.close()
+            clear_user_profile_cache(username)
+            
+            # 更新成功后删除旧头像
+            delete_old_avatar(username, new_avatar_path=avatar_path)
+            old_avatar_deleted = True
+        except Exception as e:
+            print(f"更新头像失败: {e}")
+            # 如果更新失败且已保存新文件，删除新文件
+            if avatar_path.startswith('/avatars/'):
+                filename = avatar_path[len('/avatars/'):]
+                new_path = os.path.join(AVATAR_DIR, filename)
+                if os.path.exists(new_path):
+                    os.remove(new_path)
+            return "error", 500
     
     return "success"
 

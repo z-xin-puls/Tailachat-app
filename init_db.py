@@ -32,8 +32,6 @@ def init_database():
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     name VARCHAR(100) NOT NULL,
                     owner VARCHAR(50) NOT NULL,
-                    x FLOAT NULL DEFAULT NULL,
-                    y FLOAT NULL DEFAULT NULL,
                     fortress_id INT NULL DEFAULT NULL,
                     portrait_index INT NULL DEFAULT 0,
                     position_x FLOAT NULL DEFAULT 0,

@@ -422,7 +422,11 @@ let localStream = null;
 let voiceEnabled = false;
 
 // 连接Socket.IO服务器
-function connectToSignalingServer() {
+async function connectToSignalingServer() {
+    // 确保webrtc-manager.js已加载
+    if (typeof webrtcManager === 'undefined') {
+        await loadWebRTCManager();
+    }
     webrtcManager.setRoomConfig(ROOM_CONFIG);
     webrtcManager.connectToSignalingServer();
 

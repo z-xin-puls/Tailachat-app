@@ -170,19 +170,17 @@ body::before {
 .character-portrait {
     position: fixed;
     top: 60%;
-    left: -30%;
-    transform: translateY(-50%);
-    width: 130%;
-    height: 170%;
+    left: -40%;
+    width: 150%;
+    height: 150%;
     z-index: 1;
     pointer-events: none;
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    opacity: 0.9;
-    background-image: url('/static/assets/spine/static/cetsyr/cetsyr_2b.png');
+    opacity: 0;
     filter: drop-shadow(0 0 30px rgba(255, 85, 85, 0.3));
-    animation: portraitFadeIn 1.5s ease-out
+    transition: opacity 0.3s ease;
 }
 
 .character-portrait.edit-mode {

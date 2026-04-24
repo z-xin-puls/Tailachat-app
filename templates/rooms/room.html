@@ -116,11 +116,11 @@
         </div>
         <div class="info-panel-item">
             <div class="info-panel-label">宽度</div>
-            <div class="info-panel-value" id="portraitInfoWidth">130%</div>
+            <div class="info-panel-value" id="portraitInfoWidth">150%</div>
         </div>
         <div class="info-panel-item">
             <div class="info-panel-label">高度</div>
-            <div class="info-panel-value" id="portraitInfoHeight">170%</div>
+            <div class="info-panel-value" id="portraitInfoHeight">150%</div>
         </div>
     </div>
 
@@ -194,6 +194,7 @@
             roomId: {{ room_id }},
             currentUser: '{{ current_user }}'
         };
+        const PORTRAIT_CONFIG = {{ portrait_config|tojson|safe }};
     </script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="/static/js/room.js"></script>

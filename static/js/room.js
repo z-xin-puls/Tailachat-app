@@ -36,6 +36,7 @@ async function loadWebRTCManager() {
 document.addEventListener('DOMContentLoaded', () => {
     initSidebars();
     initPortraitSwitch();
+    applyPortraitConfig(); // 应用立绘配置
     // const particleSystem = new ParticleSystem(); // 禁用粒子效果
 
     // 立即建立Socket.IO连接（用于聊天）
@@ -143,6 +144,7 @@ function initPortraitSwitch() {
     select.addEventListener('change', (e) => {
         currentPortraitIndex = parseInt(e.target.value);
         updatePortrait();
+        savePortraitConfig(); // 保存配置
     });
 
     // 打开编辑模式
@@ -205,8 +207,8 @@ function initPortraitControls() {
             translateX = matrix[4] || 0;
             translateY = matrix[5] || 0;
         }
-        const width = parseFloat(portrait.style.width) || 130;
-        const height = parseFloat(portrait.style.height) || 170;
+        const width = parseFloat(portrait.style.width) || 150;
+        const height = parseFloat(portrait.style.height) || 150;
 
         infoX.textContent = `${Math.round(translateX)}px`;
         infoY.textContent = `${Math.round(translateY)}px`;
@@ -220,6 +222,7 @@ function initPortraitControls() {
     // 监听透明度滑块变化
     opacitySlider.addEventListener('input', (e) => {
         portrait.style.opacity = e.target.value / 100;
+        savePortraitConfig(); // 保存配置
     });
 
     // 实现拖拽功能
@@ -274,11 +277,13 @@ function initPortraitControls() {
             if (animationFrameId) {
                 cancelAnimationFrame(animationFrameId);
             }
+            savePortraitConfig(); // 保存配置
         }
     });
 
     // 实现滚轮缩放功能
     let wheelAnimationFrameId;
+    let wheelTimeoutId;
 
     portrait.addEventListener('wheel', (e) => {
         if (!isEditMode) return;
@@ -291,8 +296,8 @@ function initPortraitControls() {
         wheelAnimationFrameId = requestAnimationFrame(() => {
             const scaleFactor = e.deltaY > 0 ? 0.98 : 1.02;
 
-            const currentWidth = parseFloat(portrait.style.width) || 130;
-            const currentHeight = parseFloat(portrait.style.height) || 170;
+            const currentWidth = parseFloat(portrait.style.width) || 150;
+            const currentHeight = parseFloat(portrait.style.height) || 150;
 
             const newWidth = Math.max(50, Math.min(300, currentWidth * scaleFactor));
             const newHeight = Math.max(50, Math.min(300, currentHeight * scaleFactor));
@@ -300,6 +305,12 @@ function initPortraitControls() {
             portrait.style.width = `${newWidth}%`;
             portrait.style.height = `${newHeight}%`;
             updatePortraitInfo();
+
+            // 延迟保存，避免频繁请求
+            clearTimeout(wheelTimeoutId);
+            wheelTimeoutId = setTimeout(() => {
+                savePortraitConfig();
+            }, 500);
         });
     });
 }
@@ -307,12 +318,105 @@ function initPortraitControls() {
 async function updatePortrait() {
     const portrait = document.querySelector('.character-portrait');
     if (portrait) {
+        // 保存当前的transform值
+        const currentTransform = portrait.style.transform;
+
         // 按需加载立绘图片
         await loadPortrait(currentPortraitIndex);
         portrait.style.backgroundImage = `url('${portraitPaths[currentPortraitIndex]}')`;
-        portrait.style.animation = 'none';
-        portrait.offsetHeight; // 触发重绘
-        portrait.style.animation = 'portraitFadeIn 1.5s ease-out';
+
+        // 恢复transform值，保持位置不变
+        portrait.style.transform = currentTransform;
+    }
+}
+
+// 应用立绘配置
+async function applyPortraitConfig() {
+    const portrait = document.querySelector('.character-portrait');
+    if (!portrait || !PORTRAIT_CONFIG) return;
+
+    // 先隐藏立绘，避免闪烁
+    portrait.style.opacity = '0';
+
+    // 应用立绘索引
+    currentPortraitIndex = PORTRAIT_CONFIG.portrait_index || 0;
+    await loadPortrait(currentPortraitIndex);
+    portrait.style.backgroundImage = `url('${portraitPaths[currentPortraitIndex]}')`;
+
+    // 应用位置（使用绝对像素值）
+    const posX = PORTRAIT_CONFIG.position_x || 0;
+    const posY = PORTRAIT_CONFIG.position_y || 0;
+    portrait.style.transform = `translate(${posX}px, ${posY}px)`;
+
+    // 应用缩放
+    const scale = PORTRAIT_CONFIG.portrait_scale || 1.0;
+    const baseSize = 150;
+    portrait.style.width = `${baseSize * scale}%`;
+    portrait.style.height = `${baseSize * scale}%`;
+
+    // 更新选择器值
+    const select = document.getElementById('portraitSelect');
+    if (select) {
+        select.value = currentPortraitIndex;
+    }
+
+    // 更新透明度滑块
+    const opacity = PORTRAIT_CONFIG.opacity || 90;
+    const opacitySlider = document.getElementById('portraitOpacity');
+    if (opacitySlider) {
+        opacitySlider.value = opacity;
+    }
+
+    // 最后显示立绘
+    portrait.style.opacity = opacity / 100;
+
+    console.log('立绘配置已应用:', PORTRAIT_CONFIG);
+}
+
+// 保存立绘配置
+async function savePortraitConfig() {
+    const portrait = document.querySelector('.character-portrait');
+    if (!portrait) return;
+
+    // 获取当前配置
+    const transform = window.getComputedStyle(portrait).transform;
+    let posX = 0, posY = 0;
+    if (transform && transform !== 'none') {
+        const matrix = transform.split(',').map(parseFloat);
+        posX = matrix[4] || 0;
+        posY = matrix[5] || 0;
+    }
+
+    const width = parseFloat(portrait.style.width) || 150;
+    const height = parseFloat(portrait.style.height) || 150;
+    const scale = width / 150; // 基于宽度计算缩放比例
+    const opacity = (parseFloat(portrait.style.opacity) || 0.9) * 100;
+
+    const config = {
+        portrait_index: currentPortraitIndex,
+        position_x: posX,
+        position_y: posY,
+        portrait_scale: scale,
+        opacity: opacity
+    };
+
+    try {
+        const response = await fetch(`/api/room/${ROOM_CONFIG.roomId}/portrait`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(config)
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            console.log('立绘配置已保存:', config);
+        } else {
+            console.error('保存立绘配置失败:', result.error);
+        }
+    } catch (error) {
+        console.error('保存立绘配置失败:', error);
     }
 }
 

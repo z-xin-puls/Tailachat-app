@@ -35,10 +35,33 @@ def init_database():
                     x FLOAT NULL DEFAULT NULL,
                     y FLOAT NULL DEFAULT NULL,
                     fortress_id INT NULL DEFAULT NULL,
+                    portrait_index INT NULL DEFAULT 0,
+                    position_x FLOAT NULL DEFAULT 0,
+                    position_y FLOAT NULL DEFAULT -600,
+                    portrait_scale FLOAT NULL DEFAULT 1.0,
+                    opacity FLOAT NULL DEFAULT 90,
                     FOREIGN KEY (owner) REFERENCES users(username) ON DELETE CASCADE
                 )
             """)
             print("✅ 创建 rooms 表")
+        else:
+            # 检查并添加立绘配置字段
+            cursor.execute("SHOW COLUMNS FROM rooms LIKE 'portrait_index'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE rooms ADD COLUMN portrait_index INT NULL DEFAULT 0")
+            cursor.execute("SHOW COLUMNS FROM rooms LIKE 'position_x'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE rooms ADD COLUMN position_x FLOAT NULL DEFAULT 0")
+            cursor.execute("SHOW COLUMNS FROM rooms LIKE 'position_y'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE rooms ADD COLUMN position_y FLOAT NULL DEFAULT -600")
+            cursor.execute("SHOW COLUMNS FROM rooms LIKE 'portrait_scale'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE rooms ADD COLUMN portrait_scale FLOAT NULL DEFAULT 1.0")
+            cursor.execute("SHOW COLUMNS FROM rooms LIKE 'opacity'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE rooms ADD COLUMN opacity FLOAT NULL DEFAULT 90")
+            print("✅ 更新 rooms 表结构")
 
         # 创建 fortresses 表
         if 'fortresses' not in existing_tables:

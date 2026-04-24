@@ -146,11 +146,40 @@ def room(id):
         else:
             member_items += f"<li class='user-item online' onclick=\"openVolumePanel('{safe_u}')\"><div class='user-main'><span class='badge badge-gray'>在线</span>{label}</div><div class='user-meta'>• {info_link}</div></li>"
 
+    # 获取房间立绘配置
+    portrait_config = {
+        'portrait_index': 0,
+        'position_x': 0,
+        'position_y': -600,
+        'portrait_scale': 1.0,
+        'opacity': 90
+    }
+    try:
+        db = get_db_connection()
+        cursor = db.cursor()
+        cursor.execute("""
+            SELECT portrait_index, position_x, position_y, portrait_scale, opacity
+            FROM rooms WHERE id = %s
+        """, (id,))
+        result = cursor.fetchone()
+        if result:
+            portrait_config = {
+                'portrait_index': result[0] or 0,
+                'position_x': result[1] or 0,
+                'position_y': result[2] or -600,
+                'portrait_scale': result[3] or 1.0,
+                'opacity': result[4] or 90
+            }
+        db.close()
+    except Exception as e:
+        print(f"获取房间立绘配置失败: {e}")
+
     return render_template('rooms/room.html',
                          room_id=id,
                          current_user=self_display,
                          user_count=count,
-                         member_items=member_items)
+                         member_items=member_items,
+                         portrait_config=portrait_config)
 
 @app.route('/leave-room/<room_id>')
 def leave_room(room_id):
@@ -158,6 +187,56 @@ def leave_room(room_id):
         return redirect("/login")
     # 退出房间并返回首页
     return redirect("/")
+
+@app.route('/api/room/<room_id>/portrait', methods=['POST'])
+def save_portrait_config(room_id):
+    """保存房间立绘配置"""
+    if "user" not in session:
+        return jsonify({'success': False, 'error': '未登录'}), 401
+
+    user = session['user']
+
+    try:
+        # 验证用户是否为房主
+        db = get_db_connection()
+        cursor = db.cursor()
+        cursor.execute("SELECT owner FROM rooms WHERE id = %s", (room_id,))
+        result = cursor.fetchone()
+        if not result:
+            db.close()
+            return jsonify({'success': False, 'error': '房间不存在'}), 404
+
+        owner = result[0]
+        if owner != user:
+            db.close()
+            return jsonify({'success': False, 'error': '只有房主可以修改立绘配置'}), 403
+
+        # 获取配置数据
+        data = request.get_json()
+        portrait_index = data.get('portrait_index', 0)
+        position_x = data.get('position_x', 0)
+        position_y = data.get('position_y', 0)
+        portrait_scale = data.get('portrait_scale', 1.0)
+        opacity = data.get('opacity', 90)
+
+        # 更新数据库
+        cursor.execute("""
+            UPDATE rooms
+            SET portrait_index = %s, position_x = %s, position_y = %s,
+                portrait_scale = %s, opacity = %s
+            WHERE id = %s
+        """, (portrait_index, position_x, position_y, portrait_scale, opacity, room_id))
+        db.commit()
+        db.close()
+
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"保存立绘配置失败: {e}")
+        try:
+            db.close()
+        except:
+            pass
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # HTTP API路由已移除，改用Socket.IO实时通信
 

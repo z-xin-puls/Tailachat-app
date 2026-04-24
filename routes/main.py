@@ -74,8 +74,8 @@ def index():
     return render_template('main/index.html',
                          current_user=html_escape(display_user),
                          user_role=user_role,
-                         rooms=json.dumps([{'id': r['id'], 'name': r['name'], 'owner': r['owner'], 'x': r['x'], 'y': r['y'], 'online_count': r['online_count']} for r in rooms]),
-                         user_rooms=json.dumps([{'id': r['id'], 'name': r['name'], 'owner': r['owner'], 'x': r['x'], 'y': r['y'], 'online_count': r['online_count']} for r in user_rooms]),
+                         rooms=json.dumps([{'id': r['id'], 'name': r['name'], 'owner': r['owner'], 'fortress_id': r.get('fortress_id'), 'online_count': r['online_count']} for r in rooms]),
+                         user_rooms=json.dumps([{'id': r['id'], 'name': r['name'], 'owner': r['owner'], 'fortress_id': r.get('fortress_id'), 'online_count': r['online_count']} for r in user_rooms]),
                          fortresses=json.dumps(fortress_list))
 
 @main_bp.route('/create_fortress_room', methods=['POST'])
@@ -85,10 +85,8 @@ def create_fortress_room():
     
     name = request.form['name']
     fortress_id = request.form['fortress_id']
-    x = request.form['x']
-    y = request.form['y']
     
-    room_id, error = create_room_with_fortress(name, session['user'], x, y, fortress_id)
+    room_id, error = create_room_with_fortress(name, session['user'], fortress_id)
     if error:
         return error, 400
 
@@ -124,7 +122,7 @@ def get_fortress_rooms(fortress_id):
 
         # 查询指定据点的房间
         cursor.execute("""
-            SELECT r.id, r.name, r.owner, r.x, r.y, r.fortress_id
+            SELECT r.id, r.name, r.owner, r.fortress_id
             FROM rooms r
             WHERE r.fortress_id = %s
             ORDER BY r.id DESC
@@ -138,9 +136,7 @@ def get_fortress_rooms(fortress_id):
                 'id': row[0],
                 'name': row[1],
                 'owner': row[2],
-                'x': row[3],
-                'y': row[4],
-                'fortress_id': row[5],
+                'fortress_id': row[3],
                 'online_count': 0  # 移除HTTP请求以提升性能
             })
 

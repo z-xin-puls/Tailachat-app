@@ -21,7 +21,7 @@ logging.getLogger('socketio').setLevel(logging.WARNING)
 from config import SECRET_KEY, DB_CONFIG, PROFILE_CACHE_TTL_SECONDS
 
 # 导入数据模型
-from models.database import get_db_connection, ensure_user_profile_columns, ensure_room_location_columns
+from models.database import get_db_connection, ensure_user_profile_columns
 from models.user import get_user_profiles, clear_user_profile_cache, resolve_avatar_url, format_user_label
 from models.room import get_room_by_id, create_room
 
@@ -70,7 +70,6 @@ def _init_database():
 @app.before_request
 def _init_profile_schema():
     ensure_user_profile_columns()
-    ensure_room_location_columns()
 
 # 剩余的路由（房间相关、API等）
 @app.route('/api/trtc/usersig')

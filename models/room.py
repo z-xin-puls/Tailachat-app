@@ -3,10 +3,10 @@ from models.database import get_db_connection
 from utils.validators import validate_room_name
 
 def get_all_rooms():
-    """获取所有房间（包含位置信息）"""
+    """获取所有房间"""
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT id, name, owner, x, y FROM rooms")
+    cursor.execute("SELECT id, name, owner, fortress_id FROM rooms")
     rooms = cursor.fetchall()
     db.close()
     return rooms
@@ -31,7 +31,7 @@ def create_room(name, owner, x=None, y=None):
     db.close()
     return room_id, None
 
-def create_room_with_fortress(name, owner, x, y, fortress_id):
+def create_room_with_fortress(name, owner, fortress_id):
     """创建房间并关联据点"""
     error = validate_room_name(name)
     if error:
@@ -40,8 +40,8 @@ def create_room_with_fortress(name, owner, x, y, fortress_id):
     db = get_db_connection()
     cursor = db.cursor()
     
-    cursor.execute("INSERT INTO rooms (name, owner, x, y, fortress_id) VALUES (%s, %s, %s, %s, %s)", 
-                   (name, owner, x, y, fortress_id))
+    cursor.execute("INSERT INTO rooms (name, owner, fortress_id) VALUES (%s, %s, %s)", 
+                   (name, owner, fortress_id))
     
     db.commit()
     room_id = cursor.lastrowid

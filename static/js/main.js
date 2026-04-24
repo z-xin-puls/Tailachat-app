@@ -307,8 +307,6 @@ function showFortressInfo(fortress) {
     
     // 设置创建房间表单的隐藏字段
     document.getElementById('fortressId').value = fortress.id;
-    document.getElementById('fortressX').value = fortress.x;
-    document.getElementById('fortressY').value = fortress.y;
     
     // 加载据点房间列表
     loadFortressRooms(fortress.id);
@@ -373,8 +371,7 @@ function showRoomInfoModal(room) {
     document.getElementById('roomInfoName').textContent = room.name;
     document.getElementById('roomInfoDetails').innerHTML = 
         '<div>房主：' + room.owner + '</div>' +
-        '<div>房间ID：' + room.id + '</div>' +
-        '<div>位置：(' + room.x + ', ' + room.y + ')</div>';
+        '<div>房间ID：' + room.id + '</div>';
     
     document.getElementById('joinRoomBtn').onclick = function() {
         window.location.href = '/room/' + room.id;
@@ -428,7 +425,7 @@ function showMyOutpostsModal() {
             
             outpostItem.innerHTML = 
                 '<div class="outpost-item-name">🏰 ' + room.name + '</div>' +
-                '<div class="outpost-item-details">房主：' + room.owner + ' | 位置：(' + room.x + ', ' + room.y + ')</div>';
+                '<div class="outpost-item-details">房主：' + room.owner + '</div>';
             
             outpostList.appendChild(outpostItem);
         });
@@ -443,49 +440,52 @@ function closeMyOutpostsModal() {
     document.getElementById('myOutpostsModal').style.display = 'none';
 }
 
-// 定位到指定房间
+// 定位到指定房间所属的据点
 function locateToOutpost(room) {
-    if (room.x && room.y) {
-        // 计算房间在地图上的位置
-        var targetX = -(room.x / 2000 * 4081 * scale) + window.innerWidth / 2;
-        var targetY = -(room.y / 2000 * 5488 * scale) + window.innerHeight / 2;
+    if (room.fortress_id) {
+        // 根据房间的fortress_id找到对应的据点
+        var fortress = fortresses.find(function(f) {
+            return f.id === room.fortress_id;
+        });
         
-        // 应用边界限制
-        var mapWidth = 4081 * scale;
-        var mapHeight = 5488 * scale;
-        var containerWidth = window.innerWidth;
-        var containerHeight = window.innerHeight;
-        
-        var minX, minY, maxX, maxY;
-        
-        if (mapWidth <= containerWidth) {
-            minX = (containerWidth - mapWidth) / 2;
-            maxX = minX;
-            targetX = minX;
-        } else {
-            minX = containerWidth - mapWidth;
-            maxX = 0;
-            targetX = Math.max(minX, Math.min(maxX, targetX));
+        if (fortress && fortress.x && fortress.y) {
+            // 计算据点在地图上的位置（据点坐标已经是像素坐标）
+            var targetX = -fortress.x * scale + window.innerWidth / 2;
+            var targetY = -fortress.y * scale + window.innerHeight / 2;
+            
+            // 应用边界限制
+            var mapWidth = 4081 * scale;
+            var mapHeight = 5488 * scale;
+            var containerWidth = window.innerWidth;
+            var containerHeight = window.innerHeight;
+            
+            var minX, minY, maxX, maxY;
+            
+            if (mapWidth <= containerWidth) {
+                minX = (containerWidth - mapWidth) / 2;
+                maxX = minX;
+                targetX = minX;
+            } else {
+                minX = containerWidth - mapWidth;
+                maxX = 0;
+                targetX = Math.max(minX, Math.min(maxX, targetX));
+            }
+            
+            if (mapHeight <= containerHeight) {
+                minY = (containerHeight - mapHeight) / 2;
+                maxY = minY;
+                targetY = minY;
+            } else {
+                minY = containerHeight - mapHeight;
+                maxY = 0;
+                targetY = Math.max(minY, Math.min(maxY, targetY));
+            }
+            
+            // 平滑移动到目标位置
+            mapX = targetX;
+            mapY = targetY;
+            updateMapPosition();
         }
-        
-        if (mapHeight <= containerHeight) {
-            minY = (containerHeight - mapHeight) / 2;
-            maxY = minY;
-            targetY = minY;
-        } else {
-            minY = containerHeight - mapHeight;
-            maxY = 0;
-            targetY = Math.max(minY, Math.min(maxY, targetY));
-        }
-        
-        // 平滑移动到目标位置
-        mapX = targetX;
-        mapY = targetY;
-        updateMapPosition();
-        saveMapState();
-        
-        // 高亮显示目标房间
-        highlightOutpost(room.id);
     }
 }
 
@@ -535,23 +535,21 @@ function renderSidebarOutposts() {
         });
         
         sortedRooms.forEach(function(room) {
-            if (room.x && room.y) {
-                var outpostItem = document.createElement('div');
-                outpostItem.className = 'sidebar-outpost-item';
-                outpostItem.onclick = function() {
-                    locateToOutpost(room);
-                };
-                
-                var onlineCount = room.online_count || 0;
-                var statusIcon = onlineCount >= 6 ? '🔥' : onlineCount >= 2 ? '⚡' : '💤';
-                var statusColor = onlineCount >= 6 ? '#ef4444' : onlineCount >= 2 ? '#3b82f6' : '#2dd4bf';
-                
-                outpostItem.innerHTML = 
-                    '<div class="sidebar-outpost-name">' + statusIcon + ' ' + room.name + '</div>' +
-                    '<div class="sidebar-outpost-info">房主：' + room.owner + ' | 在线：' + onlineCount + '人</div>';
-                
-                outpostList.appendChild(outpostItem);
-            }
+            var outpostItem = document.createElement('div');
+            outpostItem.className = 'sidebar-outpost-item';
+            outpostItem.onclick = function() {
+                locateToOutpost(room);
+            };
+            
+            var onlineCount = room.online_count || 0;
+            var statusIcon = onlineCount >= 6 ? '🔥' : onlineCount >= 2 ? '⚡' : '💤';
+            var statusColor = onlineCount >= 6 ? '#ef4444' : onlineCount >= 2 ? '#3b82f6' : '#2dd4bf';
+            
+            outpostItem.innerHTML = 
+                '<div class="sidebar-outpost-name">' + statusIcon + ' ' + room.name + '</div>' +
+                '<div class="sidebar-outpost-info">房主：' + room.owner + ' | 在线：' + onlineCount + '人</div>';
+            
+            outpostList.appendChild(outpostItem);
         });
     }
 }

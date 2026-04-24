@@ -83,7 +83,7 @@ def format_user_label(username, profile_item):
     u = html_escape(username)
     nick = html_escape((profile_item or {}).get("nickname") or "")
     avatar = resolve_avatar_url((profile_item or {}).get("avatar"))
-    avatar_img = f"<img src='{avatar}' alt='avatar' style='width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:8px;'>"
+    avatar_img = f"<img src='{avatar}' alt='avatar' loading='lazy' style='width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:8px;'>"
     
     if nick and nick != username:
         return f"<div style='display:flex;align-items:center;gap:8px;min-width:0'>{avatar_img}<span class='user-name'>{nick}</span><span class='user-sub'>@{u}</span></div>"

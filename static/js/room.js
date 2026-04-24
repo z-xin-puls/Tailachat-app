@@ -2,6 +2,36 @@
 let currentTarget = '';
 const selfUser = ROOM_CONFIG.currentUser;
 
+// 动态加载脚本
+let trtcLoaded = false;
+let webrtcManagerLoaded = false;
+
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+}
+
+async function loadTRTC() {
+    if (!trtcLoaded) {
+        await loadScript('https://cdn.jsdelivr.net/npm/trtc-sdk-v5@latest/trtc.js');
+        trtcLoaded = true;
+        console.log('TRTC SDK loaded');
+    }
+}
+
+async function loadWebRTCManager() {
+    if (!webrtcManagerLoaded) {
+        await loadScript('/static/js/webrtc-manager.js');
+        webrtcManagerLoaded = true;
+        console.log('WebRTC Manager loaded');
+    }
+}
+
 // 初始化页面
 document.addEventListener('DOMContentLoaded', () => {
     initSidebars();
@@ -48,7 +78,7 @@ function updateTime() {
 }
 
 // 立绘切换功能
-const portraits = [
+const portraitPaths = [
     '/static/assets/spine/static/cetsyr/cetsyr_2b.png',
     '/static/assets/spine/static/cetsyr/cetsyr_epoque.png',
     '/static/assets/spine/static/cgbird/cgbird_sightseer.png',
@@ -63,8 +93,27 @@ const portraits = [
     '/static/assets/spine/static/nymph/nymph_epoque.png',
     '/static/assets/spine/static/plosis/plosis_yun.png'
 ];
+// 缓存已加载的立绘图片
+const portraitCache = {};
 let currentPortraitIndex = 0;
 let isEditMode = false;
+
+// 按需加载立绘图片
+function loadPortrait(index) {
+    return new Promise((resolve, reject) => {
+        if (portraitCache[index]) {
+            resolve(portraitCache[index]);
+            return;
+        }
+        const img = new Image();
+        img.src = portraitPaths[index];
+        img.onload = () => {
+            portraitCache[index] = img;
+            resolve(img);
+        };
+        img.onerror = reject;
+    });
+}
 
 function initPortraitSwitch() {
     const toggleBtn = document.getElementById('toggleEditMode');
@@ -79,7 +128,7 @@ function initPortraitSwitch() {
     select.innerHTML = '';
 
     // 为每个立绘创建选项
-    portraits.forEach((portrait, index) => {
+    portraitPaths.forEach((portrait, index) => {
         const option = document.createElement('option');
         const fileName = portrait.split('/').pop();
         option.value = index;
@@ -255,10 +304,12 @@ function initPortraitControls() {
     });
 }
 
-function updatePortrait() {
+async function updatePortrait() {
     const portrait = document.querySelector('.character-portrait');
     if (portrait) {
-        portrait.style.backgroundImage = `url('${portraits[currentPortraitIndex]}')`;
+        // 按需加载立绘图片
+        await loadPortrait(currentPortraitIndex);
+        portrait.style.backgroundImage = `url('${portraitPaths[currentPortraitIndex]}')`;
         portrait.style.animation = 'none';
         portrait.offsetHeight; // 触发重绘
         portrait.style.animation = 'portraitFadeIn 1.5s ease-out';
@@ -494,6 +545,10 @@ function closePeerConnection(username) {
 // 启动语音
 async function startVoiceClient() {
     try {
+        // 动态加载TRTC SDK和WebRTC Manager
+        await loadTRTC();
+        await loadWebRTCManager();
+
         console.log('开始获取音频流...');
         // 获取本地音频流 - 优化参数减少回声
         localStream = await navigator.mediaDevices.getUserMedia({

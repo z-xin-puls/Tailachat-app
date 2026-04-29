@@ -13,6 +13,7 @@ def get_db_connection():
 
 def ensure_user_profile_columns():
     """确保用户表有头像和昵称字段"""
+    db = None
     try:
         db = get_db_connection()
         cursor = db.cursor()
@@ -25,9 +26,12 @@ def ensure_user_profile_columns():
         if not has_avatar:
             cursor.execute("ALTER TABLE users ADD COLUMN avatar VARCHAR(255) NULL DEFAULT NULL")
         db.commit()
+        cursor.close()
         db.close()
-    except:
-        try:
-            db.close()
-        except:
-            pass
+    except Exception as e:
+        print(f"确保用户表字段失败: {e}")
+        if db:
+            try:
+                db.close()
+            except:
+                pass

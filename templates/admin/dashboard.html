@@ -58,7 +58,7 @@
         
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             margin-bottom: 32px;
         }
@@ -85,6 +85,68 @@
         }
         
         .section-title { color: #fff; font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+        
+        .chart-container {
+            background: rgba(26, 16, 37, 0.6);
+            border: 1px solid rgba(255, 85, 85, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            height: 420px;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .chart-container:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255, 85, 85, 0.15);
+        }
+        
+        .chart-large {
+            height: 470px;
+        }
+        
+        .dashboard-grid {
+            background: rgba(26, 16, 37, 0.6);
+            border: 1px solid rgba(255, 85, 85, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .chart-single {
+            margin-bottom: 20px;
+        }
+        
+        .section-title { 
+            color: #fff; 
+            font-size: 16px; 
+            font-weight: 600; 
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 16px;
+            background: #FF5555;
+            border-radius: 2px;
+        }
+        
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+            
+            .chart-large {
+                height: 400px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -131,6 +193,16 @@
                 <div class="stat-value">{{ active_rooms }}</div>
             </div>
             <div class="stat-card">
+                <div class="stat-icon">🏰</div>
+                <div class="stat-label">总房间数</div>
+                <div class="stat-value">{{ total_rooms }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🏗️</div>
+                <div class="stat-label">总据点数</div>
+                <div class="stat-value">{{ total_fortresses }}</div>
+            </div>
+            <div class="stat-card">
                 <div class="stat-icon">➕</div>
                 <div class="stat-label">今日创建房间</div>
                 <div class="stat-value">{{ today_created_rooms }}</div>
@@ -139,6 +211,49 @@
                 <div class="stat-icon">🔐</div>
                 <div class="stat-label">管理员数</div>
                 <div class="stat-value">{{ admin_count }}</div>
+            </div>
+        </div>
+        
+        <!-- 单列图表布局 -->
+        <div class="chart-single">
+            <div class="chart-container chart-large">
+                <div class="section-title">👥 用户增长趋势</div>
+                {{ user_growth_html|safe }}
+            </div>
+        </div>
+        
+        <div class="chart-single">
+            <div class="chart-container">
+                <div class="section-title">👥 用户角色分布</div>
+                {{ role_pie_html|safe }}
+            </div>
+        </div>
+        
+        <div class="chart-single">
+            <div class="chart-container">
+                <div class="section-title">🏠 房间创建趋势</div>
+                {{ room_creation_html|safe }}
+            </div>
+        </div>
+        
+        <div class="chart-single">
+            <div class="chart-container">
+                <div class="section-title">⏰ 24小时活动分析</div>
+                {{ hourly_activity_html|safe }}
+            </div>
+        </div>
+        
+        <div class="chart-single">
+            <div class="chart-container">
+                <div class="section-title">🔥 用户活动热力图</div>
+                {{ heatmap_html|safe }}
+            </div>
+        </div>
+        
+        <div class="chart-single">
+            <div class="chart-container">
+                <div class="section-title">📈 活动统计概览</div>
+                {{ activity_chart_html|safe }}
             </div>
         </div>
         

@@ -3,7 +3,8 @@ from flask import Blueprint, request, redirect, render_template, session, jsonif
 from models.database import get_db_connection
 from models.user import get_user_profiles, get_user_role
 from models.room import get_all_rooms
-from models.analytics import get_dashboard_stats
+from models.analytics import get_dashboard_stats, get_user_growth_trend, get_room_creation_trend, get_hourly_activity_analysis, get_activity_statistics, get_user_activity_heatmap_data
+from models.charts import create_dashboard_grid, create_user_role_pie_chart, create_activity_statistics_chart, create_user_activity_heatmap
 from utils.decorators import admin_required
 from utils.helpers import html_escape
 
@@ -29,6 +30,27 @@ def admin_dashboard():
     # 获取统计信息
     stats = get_dashboard_stats(online_users=online_users, active_rooms=active_rooms)
     
+    # 获取图表数据
+    user_growth_data = get_user_growth_trend(days=7)
+    room_creation_data = get_room_creation_trend(days=7)
+    hourly_activity_data = get_hourly_activity_analysis(days=7)
+    activity_stats = get_activity_statistics(days=7)
+    heatmap_data = get_user_activity_heatmap_data(days=30)
+    
+    # 生成图表
+    dashboard_charts = create_dashboard_grid(user_growth_data, room_creation_data, hourly_activity_data)
+    role_pie_chart = create_user_role_pie_chart(stats['admin_count'], stats['total_users'] - stats['admin_count'])
+    activity_chart = create_activity_statistics_chart(activity_stats)
+    heatmap_chart = create_user_activity_heatmap(heatmap_data)
+    
+    # 渲染图表为HTML
+    user_growth_html = dashboard_charts.get('user_growth', {}).render_embed() if dashboard_charts.get('user_growth') else ""
+    room_creation_html = dashboard_charts.get('room_creation', {}).render_embed() if dashboard_charts.get('room_creation') else ""
+    hourly_activity_html = dashboard_charts.get('hourly_activity', {}).render_embed() if dashboard_charts.get('hourly_activity') else ""
+    pie_html = role_pie_chart.render_embed() if role_pie_chart else ""
+    activity_html = activity_chart.render_embed() if activity_chart else ""
+    heatmap_html = heatmap_chart.render_embed() if heatmap_chart else ""
+    
     return render_template('admin/dashboard.html',
                          total_users=stats['total_users'],
                          admin_count=stats['admin_count'],
@@ -37,7 +59,13 @@ def admin_dashboard():
                          online_users=stats['online_users'],
                          today_active_users=stats['today_active_users'],
                          active_rooms=stats['active_rooms'],
-                         today_created_rooms=stats['today_created_rooms'])
+                         today_created_rooms=stats['today_created_rooms'],
+                         user_growth_html=user_growth_html,
+                         room_creation_html=room_creation_html,
+                         hourly_activity_html=hourly_activity_html,
+                         role_pie_html=pie_html,
+                         activity_chart_html=activity_html,
+                         heatmap_html=heatmap_html)
 
 @admin_bp.route('/admin/users')
 @admin_required

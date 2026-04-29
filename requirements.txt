@@ -7,3 +7,6 @@ gunicorn
 gevent
 mysql-connector-python
 Pillow
+numpy
+pandas
+pyecharts

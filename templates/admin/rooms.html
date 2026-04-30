@@ -32,8 +32,47 @@
             align-items: center;
             margin-bottom: 24px;
         }
-        
+
         .header h1 { color: #fff; font-size: 28px; font-weight: 700; }
+
+        .search-box {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .search-input {
+            padding: 10px 16px;
+            background: rgba(26, 16, 37, 0.6);
+            border: 1px solid rgba(255, 85, 85, 0.3);
+            border-radius: 8px;
+            color: #e5e7eb;
+            font-size: 14px;
+            outline: none;
+            width: 300px;
+            backdrop-filter: blur(10px);
+        }
+
+        .search-input:focus {
+            border-color: rgba(255, 85, 85, 0.5);
+            box-shadow: 0 0 0 3px rgba(255, 85, 85, 0.1);
+        }
+
+        .search-btn {
+            padding: 10px 20px;
+            background: rgba(255, 85, 85, 0.3);
+            color: #FF5555;
+            border: 1px solid rgba(255, 85, 85, 0.4);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .search-btn:hover {
+            background: rgba(255, 85, 85, 0.5);
+            border-color: rgba(255, 85, 85, 0.6);
+        }
         
         .nav {
             display: flex;
@@ -109,12 +148,17 @@
     <div class="container">
         <div class="header">
             <h1>房间列表</h1>
-            <div class="nav">
-                <button class="nav-btn" onclick="window.location.href='/admin'">概览</button>
-                <button class="nav-btn" onclick="window.location.href='/admin/users'">用户管理</button>
-                <button class="nav-btn active">房间管理</button>
-                <button class="nav-btn" onclick="window.location.href='/admin/fortresses'">据点管理</button>
+            <div class="search-box">
+                <input type="text" id="searchInput" class="search-input" placeholder="搜索房间（房间名/ID，支持模糊搜索）" onkeypress="handleSearchKeypress(event)">
+                <button class="search-btn" onclick="searchRooms()">搜索</button>
+                <button class="search-btn" onclick="resetSearch()">重置</button>
             </div>
+        </div>
+        <div class="nav" style="margin-bottom: 24px;">
+            <button class="nav-btn" onclick="window.location.href='/admin'">概览</button>
+            <button class="nav-btn" onclick="window.location.href='/admin/users'">用户管理</button>
+            <button class="nav-btn active">房间管理</button>
+            <button class="nav-btn" onclick="window.location.href='/admin/fortresses'">据点管理</button>
         </div>
         
         <div class="table-container">
@@ -127,7 +171,7 @@
                         <th>操作</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="roomTable">
                     {% for room in rooms %}
                     <tr>
                         <td>{{ room.id }}</td>
@@ -144,6 +188,73 @@
     </div>
     
     <script>
+        let allRooms = [];
+
+        // 初始化房间数据
+        {% for room in rooms %}
+        allRooms.push({
+            id: {{ room.id }},
+            name: '{{ room.name }}',
+            owner: '{{ room.owner }}'
+        });
+        {% endfor %}
+
+        function handleSearchKeypress(event) {
+            if (event.key === 'Enter') {
+                searchRooms();
+            }
+        }
+
+        function searchRooms() {
+            const searchTerm = document.getElementById('searchInput').value.trim().toLowerCase();
+            if (!searchTerm) {
+                renderRooms(allRooms);
+                return;
+            }
+
+            const filteredRooms = allRooms.filter(room => {
+                // 精确匹配ID
+                if (searchTerm === room.id.toString()) {
+                    return true;
+                }
+                // 模糊匹配房间名
+                if (room.name.toLowerCase().includes(searchTerm)) {
+                    return true;
+                }
+                return false;
+            });
+
+            renderRooms(filteredRooms);
+        }
+
+        function resetSearch() {
+            document.getElementById('searchInput').value = '';
+            renderRooms(allRooms);
+        }
+
+        function renderRooms(rooms) {
+            const tbody = document.getElementById('roomTable');
+            tbody.innerHTML = '';
+
+            if (rooms.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9ca3af;">未找到匹配的房间</td></tr>';
+                return;
+            }
+
+            rooms.forEach(room => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${room.id}</td>
+                    <td>${room.name}</td>
+                    <td>${room.owner}</td>
+                    <td>
+                        <button class="action-btn btn-delete" onclick="deleteRoom(${room.id}, '${room.name}')">删除</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
         async function deleteRoom(roomId, roomName) {
             if (!confirm(`确定要删除房间 "${roomName}" 吗？此操作不可恢复！`)) {
                 return;

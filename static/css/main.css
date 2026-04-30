@@ -4,6 +4,11 @@ body{background:#0a0a0f;color:#e5e7eb;font-family:Segoe UI,微软雅黑;overflow
 .title{color:#FF5555;font-size:20px;font-weight:900}
 .user-info{color:#9ca3af;font-size:14px}
 .actions{display:flex;gap:10px}
+.search-box{display:flex;gap:8px;align-items:center}
+.search-input{padding:8px 12px;background:rgba(26,16,37,0.6);border:1px solid rgba(255,85,85,0.3);border-radius:8px;color:#e5e7eb;font-size:13px;outline:none;width:200px;backdrop-filter:blur(10px)}
+.search-input:focus{border-color:rgba(255,85,85,0.5);box-shadow:0 0 0 3px rgba(255,85,85,0.1)}
+.search-btn{padding:8px 16px;background:rgba(255,85,85,0.3);color:#FF5555;border:1px solid rgba(255,85,85,0.4);border-radius:8px;cursor:pointer;font-size:13px;transition:all 0.2s}
+.search-btn:hover{background:rgba(255,85,85,0.5);border-color:rgba(255,85,85,0.6)}
 .btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:8px;border:1px solid transparent;font-weight:700;cursor:pointer;font-size:13px;transform:perspective(500px) rotateX(5deg) rotateY(-5deg);transform-style:preserve-3d;transition:all 0.3s ease}
 .btn-teal{background:rgba(255,85,85,0.2);color:#FF5555;border:1px solid rgba(255,85,85,0.4);backdrop-filter:blur(10px)}
 .btn-ghost{background:rgba(26,16,37,0.6);color:#e5e7eb;border-color:rgba(255,85,85,0.3);backdrop-filter:blur(10px)}

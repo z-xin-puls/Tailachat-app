@@ -788,10 +788,109 @@ class ModalParticle {
     }
 }
 
+// 房间搜索功能
+function handleRoomSearchKeypress(event) {
+    if (event.key === 'Enter') {
+        searchRooms();
+    }
+}
+
+function searchRooms() {
+    const searchTerm = document.getElementById('roomSearchInput').value.trim().toLowerCase();
+    if (!searchTerm) {
+        alert('请输入搜索关键词');
+        return;
+    }
+
+    // 在所有房间中搜索
+    const filteredRooms = rooms.filter(room => {
+        // 精确匹配ID
+        if (searchTerm === room.id.toString()) {
+            return true;
+        }
+        // 模糊匹配房间名
+        if (room.name.toLowerCase().includes(searchTerm)) {
+            return true;
+        }
+        return false;
+    });
+
+    if (filteredRooms.length === 0) {
+        alert('未找到匹配的房间');
+        return;
+    }
+
+    // 显示搜索结果弹窗
+    showSearchResults(filteredRooms);
+}
+
+function showSearchResults(roomList) {
+    // 创建搜索结果弹窗
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'searchResultsOverlay';
+    overlay.style.display = 'block';
+
+    const modal = document.createElement('div');
+    modal.className = 'my-outposts-modal';
+    modal.id = 'searchResultsModal';
+    modal.style.display = 'block';
+    modal.style.width = '500px';
+
+    const header = document.createElement('div');
+    header.className = 'my-outposts-header';
+    header.innerHTML = `
+        <div class="my-outposts-title">🔍 搜索结果</div>
+        <button class="my-outposts-close" onclick="closeSearchResults()">&times;</button>
+    `;
+
+    const list = document.createElement('div');
+    list.className = 'outpost-list';
+    list.id = 'searchResultsList';
+
+    roomList.forEach(room => {
+        const item = document.createElement('div');
+        item.className = 'outpost-item';
+        item.style.cssText = 'padding: 12px; border-bottom: 1px solid rgba(255,85,85,0.2); display: flex; justify-content: space-between; align-items: center;';
+        item.innerHTML = `
+            <div>
+                <div style="color: #e5e7eb; font-weight: 700; margin-bottom: 4px;">${room.name}</div>
+                <div style="color: #9ca3af; font-size: 12px;">ID: ${room.id} | 创建者: ${room.owner}</div>
+            </div>
+            <button class="btn btn-teal" onclick="joinRoom(${room.id})" style="padding: 6px 12px; font-size: 12px;">加入</button>
+        `;
+        list.appendChild(item);
+    });
+
+    const actions = document.createElement('div');
+    actions.className = 'my-outposts-actions';
+    actions.innerHTML = `
+        <button type="button" class="btn btn-ghost" onclick="closeSearchResults()">关闭</button>
+    `;
+
+    modal.appendChild(header);
+    modal.appendChild(list);
+    modal.appendChild(actions);
+    document.body.appendChild(overlay);
+    document.body.appendChild(modal);
+}
+
+function closeSearchResults() {
+    const overlay = document.getElementById('searchResultsOverlay');
+    const modal = document.getElementById('searchResultsModal');
+    if (overlay) overlay.remove();
+    if (modal) modal.remove();
+}
+
+function joinRoom(roomId) {
+    closeSearchResults();
+    window.location.href = `/room/${roomId}`;
+}
+
 // 初始化
 window.addEventListener('load', function() {
     centerMap();
-    
+
     // 检查据点数据
     console.log('据点数量:', fortresses.length);
     if (fortresses.length > 0) {

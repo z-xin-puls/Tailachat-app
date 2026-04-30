@@ -74,13 +74,13 @@ def admin_users():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT username, nickname, avatar, role FROM users ORDER BY username")
+        cursor.execute("SELECT id, username, nickname, avatar, role FROM users ORDER BY username")
         users = cursor.fetchall()
         conn.close()
     except Exception as e:
         print(f"获取用户列表失败: {e}")
         users = []
-    
+
     return render_template('admin/users.html', users=users)
 
 @admin_bp.route('/admin/api/users', methods=['GET'])
@@ -132,16 +132,40 @@ def delete_user(username):
         # 不允许删除自己
         if username == session['user']:
             return jsonify({'success': False, 'error': '不能删除自己'})
-        
+
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM users WHERE username = %s", (username,))
         conn.commit()
         conn.close()
-        
+
         return jsonify({'success': True})
     except Exception as e:
         print(f"删除用户失败: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@admin_bp.route('/admin/api/user/<username>/reset_password', methods=['POST'])
+@admin_required
+def reset_user_password(username):
+    """重置用户密码为123456"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # 检查用户是否存在
+        cursor.execute("SELECT username FROM users WHERE username = %s", (username,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'success': False, 'error': '用户不存在'})
+
+        # 重置密码为123456
+        cursor.execute("UPDATE users SET password = %s WHERE username = %s", ('123456', username))
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"重置密码失败: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
 @admin_bp.route('/admin/rooms')

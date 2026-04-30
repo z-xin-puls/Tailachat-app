@@ -203,6 +203,16 @@ def profile():
                 </div>
 
                 <div class="sidebar-module">
+                    <div class="sidebar-label">修改密码</div>
+                    <form method="post" action="/change_password">
+                        <input type="password" name="old_password" placeholder="当前密码" class="sidebar-input" style="margin-bottom:12px">
+                        <input type="password" name="new_password" placeholder="新密码" class="sidebar-input" style="margin-bottom:12px">
+                        <input type="password" name="confirm_password" placeholder="确认新密码" class="sidebar-input" style="margin-bottom:12px">
+                        <button type="submit" class="sidebar-btn">修改密码</button>
+                    </form>
+                </div>
+
+                <div class="sidebar-module">
                     <div class="sidebar-label">修改头像</div>
                     <button class="sidebar-btn" onclick="openAvatarModal()">更换头像</button>
                 </div>
@@ -418,6 +428,56 @@ def profile():
     </html>
     '''
     return html
+
+@profile_bp.route('/change_password', methods=['POST'])
+def change_password():
+    if "user" not in session:
+        return redirect("/login")
+    username = session["user"]
+
+    old_password = request.form.get("old_password", "")
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+
+    # 验证输入
+    if not old_password or not new_password or not confirm_password:
+        return "<h3>所有字段都必须填写</h3>"
+
+    if new_password != confirm_password:
+        return "<h3>两次输入的新密码不一致</h3>"
+
+    # 验证密码格式
+    from utils.validators import validate_password
+    error = validate_password(new_password)
+    if error:
+        return f"<h3>{error}</h3>"
+
+    try:
+        db = get_db_connection()
+        cursor = db.cursor()
+
+        # 验证旧密码
+        cursor.execute("SELECT password FROM users WHERE username=%s", (username,))
+        result = cursor.fetchone()
+
+        if not result:
+            db.close()
+            return "<h3>用户不存在</h3>"
+
+        if result[0] != old_password:
+            db.close()
+            return "<h3>当前密码错误</h3>"
+
+        # 更新新密码
+        cursor.execute("UPDATE users SET password=%s WHERE username=%s", (new_password, username))
+        db.commit()
+        db.close()
+
+        return "<h3>密码修改成功，请重新登录</h3><script>setTimeout(function(){window.location='/logout'}, 2000);</script>"
+
+    except Exception as e:
+        print(f"修改密码失败: {e}")
+        return f"<h3>修改密码失败：{str(e)}</h3>"
 
 @profile_bp.route('/update_avatar', methods=['POST'])
 def update_avatar():

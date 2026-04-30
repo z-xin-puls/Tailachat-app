@@ -12,6 +12,10 @@
             <div class="user-info">欢迎，{{ current_user }}</div>
         </div>
         <div class="actions">
+            <div class="search-box">
+                <input type="text" id="roomSearchInput" class="search-input" placeholder="搜索房间..." onkeypress="handleRoomSearchKeypress(event)">
+                <button class="search-btn" onclick="searchRooms()">搜索</button>
+            </div>
         </div>
     </div>
 

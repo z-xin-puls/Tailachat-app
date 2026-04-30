@@ -32,8 +32,47 @@
             align-items: center;
             margin-bottom: 24px;
         }
-        
+
         .header h1 { color: #fff; font-size: 28px; font-weight: 700; }
+
+        .search-box {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .search-input {
+            padding: 10px 16px;
+            background: rgba(26, 16, 37, 0.6);
+            border: 1px solid rgba(255, 85, 85, 0.3);
+            border-radius: 8px;
+            color: #e5e7eb;
+            font-size: 14px;
+            outline: none;
+            width: 300px;
+            backdrop-filter: blur(10px);
+        }
+
+        .search-input:focus {
+            border-color: rgba(255, 85, 85, 0.5);
+            box-shadow: 0 0 0 3px rgba(255, 85, 85, 0.1);
+        }
+
+        .search-btn {
+            padding: 10px 20px;
+            background: rgba(255, 85, 85, 0.3);
+            color: #FF5555;
+            border: 1px solid rgba(255, 85, 85, 0.4);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .search-btn:hover {
+            background: rgba(255, 85, 85, 0.5);
+            border-color: rgba(255, 85, 85, 0.6);
+        }
         
         .nav {
             display: flex;
@@ -110,7 +149,8 @@
         .btn-promote { background: rgba(255, 85, 85, 0.2); color: #FF5555; border: 1px solid rgba(255, 85, 85, 0.4); }
         .btn-demote { background: #f59e0b; color: #111; }
         .btn-delete { background: #ef4444; color: #fff; }
-        
+        .btn-reset { background: #3b82f6; color: #fff; }
+
         .action-btn:hover { filter: brightness(1.1); }
     </style>
 </head>
@@ -123,12 +163,17 @@
     <div class="container">
         <div class="header">
             <h1>用户列表</h1>
-            <div class="nav">
-                <button class="nav-btn" onclick="window.location.href='/admin'">概览</button>
-                <button class="nav-btn active">用户管理</button>
-                <button class="nav-btn" onclick="window.location.href='/admin/rooms'">房间管理</button>
-                <button class="nav-btn" onclick="window.location.href='/admin/fortresses'">据点管理</button>
+            <div class="search-box">
+                <input type="text" id="searchInput" class="search-input" placeholder="搜索用户（昵称/账号/ID）" onkeypress="handleSearchKeypress(event)">
+                <button class="search-btn" onclick="searchUsers()">搜索</button>
+                <button class="search-btn" onclick="resetSearch()">重置</button>
             </div>
+        </div>
+        <div class="nav" style="margin-bottom: 24px;">
+            <button class="nav-btn" onclick="window.location.href='/admin'">概览</button>
+            <button class="nav-btn active">用户管理</button>
+            <button class="nav-btn" onclick="window.location.href='/admin/rooms'">房间管理</button>
+            <button class="nav-btn" onclick="window.location.href='/admin/fortresses'">据点管理</button>
         </div>
         
         <div class="table-container">
@@ -157,6 +202,7 @@
                             {% else %}
                             <button class="action-btn btn-demote" onclick="updateRole('{{ user.username }}', 'user')">设为用户</button>
                             {% endif %}
+                            <button class="action-btn btn-reset" onclick="resetPassword('{{ user.username }}')">重置密码</button>
                             <button class="action-btn btn-delete" onclick="deleteUser('{{ user.username }}')">删除</button>
                         </td>
                     </tr>
@@ -167,6 +213,87 @@
     </div>
     
     <script>
+        let allUsers = [];
+
+        // 初始化用户数据
+        {% for user in users %}
+        allUsers.push({
+            username: '{{ user.username }}',
+            nickname: '{{ user.nickname or "" }}',
+            role: '{{ user.role }}',
+            id: {{ user.id if user.id else 0 }}
+        });
+        {% endfor %}
+
+        function handleSearchKeypress(event) {
+            if (event.key === 'Enter') {
+                searchUsers();
+            }
+        }
+
+        function searchUsers() {
+            const searchTerm = document.getElementById('searchInput').value.trim().toLowerCase();
+            if (!searchTerm) {
+                renderUsers(allUsers);
+                return;
+            }
+
+            const filteredUsers = allUsers.filter(user => {
+                // 精确匹配ID
+                if (searchTerm === user.id.toString()) {
+                    return true;
+                }
+                // 精确匹配用户名
+                if (searchTerm === user.username.toLowerCase()) {
+                    return true;
+                }
+                // 模糊匹配昵称
+                if (user.nickname && user.nickname.toLowerCase().includes(searchTerm)) {
+                    return true;
+                }
+                return false;
+            });
+
+            renderUsers(filteredUsers);
+        }
+
+        function resetSearch() {
+            document.getElementById('searchInput').value = '';
+            renderUsers(allUsers);
+        }
+
+        function renderUsers(users) {
+            const tbody = document.getElementById('userTable');
+            tbody.innerHTML = '';
+
+            if (users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9ca3af;">未找到匹配的用户</td></tr>';
+                return;
+            }
+
+            users.forEach(user => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${user.username}</td>
+                    <td>${user.nickname || '-'}</td>
+                    <td>
+                        <span class="role-badge ${user.role === 'admin' ? 'role-admin' : 'role-user'}">
+                            ${user.role === 'admin' ? '管理员' : '用户'}
+                        </span>
+                    </td>
+                    <td>
+                        ${user.role === 'user' ?
+                            `<button class="action-btn btn-promote" onclick="updateRole('${user.username}', 'admin')">设为管理员</button>` :
+                            `<button class="action-btn btn-demote" onclick="updateRole('${user.username}', 'user')">设为用户</button>`
+                        }
+                        <button class="action-btn btn-reset" onclick="resetPassword('${user.username}')">重置密码</button>
+                        <button class="action-btn btn-delete" onclick="deleteUser('${user.username}')">删除</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
         async function updateRole(username, newRole) {
             if (!confirm(`确定要将用户 ${username} 的角色修改为 ${newRole === 'admin' ? '管理员' : '用户'} 吗？`)) {
                 return;
@@ -194,13 +321,13 @@
             if (!confirm(`确定要删除用户 ${username} 吗？此操作不可恢复！`)) {
                 return;
             }
-            
+
             try {
                 const response = await fetch(`/admin/api/user/${username}/delete`, {
                     method: 'DELETE'
                 });
                 const data = await response.json();
-                
+
                 if (data.success) {
                     location.reload();
                 } else {
@@ -208,6 +335,27 @@
                 }
             } catch (error) {
                 alert('删除失败: ' + error.message);
+            }
+        }
+
+        async function resetPassword(username) {
+            if (!confirm(`确定要将用户 ${username} 的密码重置为 123456 吗？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/admin/api/user/${username}/reset_password`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`用户 ${username} 的密码已重置为 123456`);
+                } else {
+                    alert(data.error || '重置失败');
+                }
+            } catch (error) {
+                alert('重置失败: ' + error.message);
             }
         }
     </script>

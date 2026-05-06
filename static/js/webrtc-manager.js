@@ -98,6 +98,13 @@ class WebRTCManager {
                 }
             });
 
+            this.socket.on('user_joined_room', (data) => {
+                console.log('用户访问房间:', data.username);
+                if (this.onUserJoinedRoomCallback) {
+                    this.onUserJoinedRoomCallback(data);
+                }
+            });
+
             this.socket.on('room_users', (data) => {
                 console.log('房间用户列表:', data.users);
                 if (this.onRoomUsersCallback) {
@@ -129,6 +136,11 @@ class WebRTCManager {
     // 设置房间用户列表回调
     onRoomUsers(callback) {
         this.onRoomUsersCallback = callback;
+    }
+
+    // 设置用户访问房间回调
+    onUserJoinedRoom(callback) {
+        this.onUserJoinedRoomCallback = callback;
     }
 
     // 设置聊天历史回调

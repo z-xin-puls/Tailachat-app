@@ -548,6 +548,15 @@ async function connectToSignalingServer() {
         console.log('收到聊天消息:', data);
         appendChat(data);
         if (data.id && data.id > lastChatId) lastChatId = data.id;
+        
+        // 显示新消息弹窗
+        if (data.user !== selfUser) {
+            showMessagePopup('message', {
+                username: data.user,
+                content: data.text,
+                time: data.time
+            });
+        }
     });
 
     webrtcManager.onChatError((data) => {
@@ -555,10 +564,94 @@ async function connectToSignalingServer() {
         alert('发送失败：' + (data.error || '未知错误'));
     });
 
+    // 设置用户加入/离开回调
+    webrtcManager.onUserJoined((data) => {
+        console.log('用户加入:', data);
+        // 显示用户加入弹窗
+        if (data.username !== selfUser) {
+            showMessagePopup('system', {
+                username: data.username,
+                content: '启动了语音',
+                time: new Date().toLocaleTimeString()
+            });
+        }
+    });
+
+    webrtcManager.onUserLeft((data) => {
+        console.log('用户离开:', data);
+        // 显示用户离开弹窗
+        if (data.username !== selfUser) {
+            showMessagePopup('system', {
+                username: data.username,
+                content: '关闭了语音',
+                time: new Date().toLocaleTimeString()
+            });
+        }
+    });
+
+    // 设置用户访问房间回调
+    webrtcManager.onUserJoinedRoom((data) => {
+        console.log('用户访问房间:', data);
+        // 显示用户访问房间弹窗
+        if (data.username !== selfUser) {
+            showMessagePopup('system', {
+                username: data.username,
+                content: '进入了房间',
+                time: new Date().toLocaleTimeString()
+            });
+        }
+    });
+
     // 设置WebRTC回调
     webrtcManager.onRemoteStream((stream, username) => {
         playRemoteStream(stream);
     });
+}
+
+// 显示消息弹窗
+function showMessagePopup(type, data) {
+    const popup = document.getElementById('message-popup');
+    
+    const messageItem = document.createElement('div');
+    messageItem.className = `message-item ${type}`;
+    
+    const now = new Date();
+    const timeStr = data.time || now.toLocaleTimeString();
+    
+    const icon = type === 'message' ? '💬' : '👥';
+    const typeText = type === 'message' ? '新消息' : '系统通知';
+    
+    messageItem.innerHTML = `
+        <div class="message-header">
+            <span class="message-icon">${icon}</span>
+            <span class="message-type">${typeText}</span>
+            <span class="message-time">${timeStr}</span>
+        </div>
+        <div class="message-content">
+            <span class="message-user">${data.username}</span>: ${data.content}
+        </div>
+        <button class="message-close" onclick="this.parentElement.remove()">×</button>
+    `;
+    
+    popup.appendChild(messageItem);
+    
+    // 自动移除弹窗（5秒后）
+    setTimeout(() => {
+        if (messageItem.parentElement) {
+            messageItem.style.animation = 'fadeOut 0.3s ease-out';
+            setTimeout(() => {
+                if (messageItem.parentElement) {
+                    messageItem.remove();
+                }
+            }, 300);
+        }
+    }, 5000);
+    
+    // 限制弹窗数量（最多显示3个）
+    const messages = popup.querySelectorAll('.message-item');
+    if (messages.length > 3) {
+        messages[0].remove();
+    }
 }
 
 // 创建对等连接

@@ -549,6 +549,12 @@ def handle_join_chat_room(data):
     # 加入SocketIO房间
     join_room(room_id)
 
+    # 通知房间内其他用户有新用户访问
+    emit('user_joined_room', {
+        'username': username,
+        'room_id': room_id
+    }, room=room_id, include_self=False)
+
     # 发送房间历史消息
     room = chat_rooms.get(room_id)
     if room is None:

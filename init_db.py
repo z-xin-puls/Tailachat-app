@@ -20,7 +20,11 @@ def init_database():
                     username VARCHAR(50) PRIMARY KEY,
                     password VARCHAR(255) NOT NULL,
                     nickname VARCHAR(30) NULL DEFAULT NULL,
-                    avatar VARCHAR(255) NULL DEFAULT NULL
+                    avatar VARCHAR(255) NULL DEFAULT NULL,
+                    role ENUM('user', 'admin') DEFAULT 'user',
+                    banned BOOLEAN DEFAULT FALSE,
+                    ban_reason TEXT NULL DEFAULT NULL,
+                    ban_time DATETIME NULL DEFAULT NULL
                 )
             """)
             print("✅ 创建 users 表")
@@ -60,6 +64,23 @@ def init_database():
             if not cursor.fetchone():
                 cursor.execute("ALTER TABLE rooms ADD COLUMN opacity FLOAT NULL DEFAULT 90")
             print("✅ 更新 rooms 表结构")
+
+        # 检查并更新 users 表结构（如果表已存在）
+        if 'users' in existing_tables:
+            # 检查并添加封禁相关字段
+            cursor.execute("SHOW COLUMNS FROM users LIKE 'role'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE users ADD COLUMN role ENUM('user', 'admin') DEFAULT 'user'")
+            cursor.execute("SHOW COLUMNS FROM users LIKE 'banned'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE users ADD COLUMN banned BOOLEAN DEFAULT FALSE")
+            cursor.execute("SHOW COLUMNS FROM users LIKE 'ban_reason'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE users ADD COLUMN ban_reason TEXT NULL DEFAULT NULL")
+            cursor.execute("SHOW COLUMNS FROM users LIKE 'ban_time'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE users ADD COLUMN ban_time DATETIME NULL DEFAULT NULL")
+            print("✅ 更新 users 表结构")
 
         # 创建 fortresses 表
         if 'fortresses' not in existing_tables:

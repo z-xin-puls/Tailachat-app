@@ -20,10 +20,14 @@ def login():
 
         db = get_db_connection()
         cursor = db.cursor()
-        cursor.execute("SELECT id, username FROM users WHERE username=%s AND password=%s", (user,pwd))
+        cursor.execute("SELECT id, username, banned FROM users WHERE username=%s AND password=%s", (user,pwd))
         res = cursor.fetchone()
         db.close()
         if res:
+            # 检查用户是否被封禁
+            if res[2]:  # res[2]是banned字段
+                return "<h3>账号已被封禁，无法登录</h3>"
+            
             session['user'] = user
             # 记录登录日志，res[0]是用户ID，res[1]是用户名
             log_user_action(

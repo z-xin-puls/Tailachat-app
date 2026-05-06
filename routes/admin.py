@@ -74,7 +74,7 @@ def admin_users():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT id, username, nickname, avatar, role FROM users ORDER BY username")
+        cursor.execute("SELECT id, username, nickname, avatar, role, banned, ban_reason, ban_time FROM users ORDER BY username")
         users = cursor.fetchall()
         conn.close()
     except Exception as e:
@@ -166,6 +166,84 @@ def reset_user_password(username):
         return jsonify({'success': True})
     except Exception as e:
         print(f"重置密码失败: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@admin_bp.route('/admin/api/user/<username>/ban', methods=['POST'])
+@admin_required
+def ban_user(username):
+    """封禁用户"""
+    try:
+        data = request.get_json()
+        reason = data.get('reason', '').strip()
+
+        if not reason:
+            return jsonify({'success': False, 'error': '封禁原因不能为空'})
+
+        # 不允许封禁自己
+        if username == session['user']:
+            return jsonify({'success': False, 'error': '不能封禁自己'})
+
+        # 不允许封禁管理员
+        if get_user_role(username) == 'admin':
+            return jsonify({'success': False, 'error': '不能封禁管理员'})
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # 检查用户是否存在
+        cursor.execute("SELECT username FROM users WHERE username = %s", (username,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'success': False, 'error': '用户不存在'})
+
+        # 封禁用户
+        cursor.execute("""
+            UPDATE users SET 
+            banned = TRUE, 
+            ban_reason = %s, 
+            ban_time = NOW() 
+            WHERE username = %s
+        """, (reason, username))
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"封禁用户失败: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@admin_bp.route('/admin/api/user/<username>/unban', methods=['POST'])
+@admin_required
+def unban_user(username):
+    """解封用户"""
+    try:
+        # 不允许解封自己（虽然自己不会被封禁）
+        if username == session['user']:
+            return jsonify({'success': False, 'error': '不能操作自己'})
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # 检查用户是否存在
+        cursor.execute("SELECT username FROM users WHERE username = %s", (username,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'success': False, 'error': '用户不存在'})
+
+        # 解封用户
+        cursor.execute("""
+            UPDATE users SET 
+            banned = FALSE, 
+            ban_reason = NULL, 
+            ban_time = NULL 
+            WHERE username = %s
+        """, (username,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"解封用户失败: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
 @admin_bp.route('/admin/rooms')

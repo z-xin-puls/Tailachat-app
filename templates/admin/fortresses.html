@@ -186,6 +186,7 @@
         <div class="nav" style="margin-bottom: 24px;">
             <button class="nav-btn" onclick="window.location.href='/admin'">概览</button>
             <button class="nav-btn" onclick="window.location.href='/admin/users'">用户管理</button>
+            <button class="nav-btn" onclick="window.location.href='/admin/logs'">日志管理</button>
             <button class="nav-btn" onclick="window.location.href='/admin/rooms'">房间管理</button>
             <button class="nav-btn active">据点管理</button>
         </div>
@@ -205,20 +206,20 @@
                 <tbody>
                     {% for fortress in fortresses %}
                     <tr>
-                        <td>{{ fortress[0] }}</td>
-                        <td>{{ fortress[1] }}</td>
-                        <td>({{ fortress[2] }}, {{ fortress[3] }})</td>
-                        <td>{{ fortress[4] or '-' }}</td>
+                        <td>{{ fortress.id }}</td>
+                        <td>{{ fortress.name }}</td>
+                        <td>({{ fortress.x }}, {{ fortress.y }})</td>
+                        <td>{{ fortress.radius or '-' }}</td>
                         <td>
-                            {% if fortress[5] %}
-                            <span style="display:inline-block;width:20px;height:20px;background:{{ fortress[5] }};border-radius:4px;border:1px solid #374151;"></span>
+                            {% if fortress.color %}
+                            <span style="display:inline-block;width:20px;height:20px;background:{{ fortress.color }};border-radius:4px;border:1px solid #374151;"></span>
                             {% else %}
                             -
                             {% endif %}
                         </td>
                         <td>
-                            <button class="action-btn btn-edit" onclick="openModal({{ fortress[0] }}, '{{ fortress[1] }}', {{ fortress[2] }}, {{ fortress[3] }}, {{ fortress[4] or 'null' }}, '{{ fortress[5] or '' }}', '{{ fortress[6] or '' }}', '{{ fortress[7] or '' }}')">编辑</button>
-                            <button class="action-btn btn-delete" onclick="deleteFortress({{ fortress[0] }}, '{{ fortress[1] }}')">删除</button>
+                            <button class="action-btn btn-edit" onclick="openModal({{ fortress.id }}, '{{ fortress.name }}', {{ fortress.x }}, {{ fortress.y }}, {{ fortress.radius or 'null' }}, '{{ fortress.color or '' }}', '{{ fortress.description or '' }}', '{{ fortress.image or '' }}')">编辑</button>
+                            <button class="action-btn btn-delete" onclick="deleteFortress({{ fortress.id }}, '{{ fortress.name }}')">删除</button>
                         </td>
                     </tr>
                     {% endfor %}

@@ -25,6 +25,9 @@ from models.database import get_db_connection, ensure_user_profile_columns
 from models.user import get_user_profiles, clear_user_profile_cache, resolve_avatar_url, format_user_label
 from models.room import get_room_by_id, create_room
 
+# 导入自定义异常
+from utils.exceptions import AppError, ValidationError, AuthenticationError, AuthorizationError, NotFoundError, DatabaseError
+
 # 导入数据库初始化
 from init_db import init_database
 
@@ -70,6 +73,57 @@ def _init_database():
 @app.before_request
 def _init_profile_schema():
     ensure_user_profile_columns()
+
+# 全局异常处理器
+@app.errorhandler(AppError)
+def handle_app_error(error):
+    """处理自定义应用异常"""
+    print(f"应用错误: {error.status_code} - {error.message}")
+    
+    # 如果是API请求，返回JSON
+    if request.path.startswith('/api/') or request.path.startswith('/admin/api/'):
+        return jsonify({
+            'success': False,
+            'error': error.message
+        }), error.status_code
+    else:
+        # 页面请求返回HTML
+        return f"<h3>{error.message}</h3>", error.status_code
+
+@app.errorhandler(404)
+def handle_not_found(error):
+    """处理404错误"""
+    if request.path.startswith('/api/') or request.path.startswith('/admin/api/'):
+        return jsonify({
+            'success': False,
+            'error': '请求的资源不存在'
+        }), 404
+    else:
+        return "<h3>页面不存在</h3>", 404
+
+@app.errorhandler(405)
+def handle_method_not_allowed(error):
+    """处理405错误"""
+    if request.path.startswith('/api/') or request.path.startswith('/admin/api/'):
+        return jsonify({
+            'success': False,
+            'error': '请求方法不被允许'
+        }), 405
+    else:
+        return "<h3>请求方法不被允许</h3>", 405
+
+@app.errorhandler(Exception)
+def handle_general_error(error):
+    """处理未预期的错误"""
+    print(f"未预期的错误: {error}")
+    
+    if request.path.startswith('/api/') or request.path.startswith('/admin/api/'):
+        return jsonify({
+            'success': False,
+            'error': '系统错误，请稍后重试'
+        }), 500
+    else:
+        return "<h3>系统错误，请稍后重试</h3>", 500
 
 # 剩余的路由（房间相关、API等）
 @app.route('/api/trtc/usersig')
@@ -189,29 +243,31 @@ def leave_room(room_id):
 
 @app.route('/api/room/<room_id>/portrait', methods=['POST'])
 def save_portrait_config(room_id):
-    """保存房间立绘配置"""
+    """保存房间立绘配置 - 使用统一错误处理"""
+    
     if "user" not in session:
-        return jsonify({'success': False, 'error': '未登录'}), 401
+        raise AuthenticationError("请先登录")
 
     user = session['user']
+    db = get_db_connection()
+    cursor = db.cursor()
 
     try:
         # 验证用户是否为房主
-        db = get_db_connection()
-        cursor = db.cursor()
         cursor.execute("SELECT owner FROM rooms WHERE id = %s", (room_id,))
         result = cursor.fetchone()
         if not result:
-            db.close()
-            return jsonify({'success': False, 'error': '房间不存在'}), 404
+            raise NotFoundError("房间不存在")
 
         owner = result[0]
         if owner != user:
-            db.close()
-            return jsonify({'success': False, 'error': '只有房主可以修改立绘配置'}), 403
+            raise AuthorizationError("只有房主可以修改立绘配置")
 
         # 获取配置数据
         data = request.get_json()
+        if not data:
+            raise ValidationError("请求数据格式错误")
+            
         portrait_index = data.get('portrait_index', 0)
         position_x = data.get('position_x', 0)
         position_y = data.get('position_y', 0)
@@ -229,13 +285,12 @@ def save_portrait_config(room_id):
         db.close()
 
         return jsonify({'success': True})
+        
     except Exception as e:
+        db.rollback()
+        db.close()
         print(f"保存立绘配置失败: {e}")
-        try:
-            db.close()
-        except:
-            pass
-        return jsonify({'success': False, 'error': str(e)}), 500
+        raise DatabaseError("保存立绘配置失败")
 
 # HTTP API路由已移除，改用Socket.IO实时通信
 

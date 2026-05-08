@@ -9,6 +9,9 @@ from utils.logger import log_user_action
 import json
 import requests
 
+# 导入自定义异常
+from utils.exceptions import AppError, ValidationError, AuthenticationError, DatabaseError
+
 main_bp = Blueprint('main', __name__)
 
 def get_real_online_count(room_id):
@@ -81,14 +84,19 @@ def index():
 @main_bp.route('/create_fortress_room', methods=['POST'])
 def create_fortress_room():
     if "user" not in session: 
-        return "error", 401
+        raise AuthenticationError("请先登录")
     
     name = request.form['name']
     fortress_id = request.form['fortress_id']
     
+    # 验证输入
+    error = validate_room_name(name)
+    if error:
+        raise ValidationError(error)
+    
     room_id, error = create_room_with_fortress(name, session['user'], fortress_id)
     if error:
-        return error, 400
+        raise ValidationError(error)
 
     # 记录创建房间日志
     log_user_action(
@@ -116,10 +124,10 @@ def create_fortress_room():
 
 @main_bp.route('/api/fortress_rooms/<int:fortress_id>')
 def get_fortress_rooms(fortress_id):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
+    try:
         # 查询指定据点的房间
         cursor.execute("""
             SELECT r.id, r.name, r.owner, r.fortress_id
@@ -146,5 +154,6 @@ def get_fortress_rooms(fortress_id):
         return jsonify({'rooms': rooms})
 
     except Exception as e:
+        conn.close()
         print(f"获取据点房间失败: {e}")
-        return jsonify({'error': str(e)}), 500
+        raise DatabaseError("获取据点房间失败")

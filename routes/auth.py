@@ -6,6 +6,9 @@ from utils.validators import validate_username, validate_password
 from utils.helpers import html_escape
 from utils.logger import log_user_action
 
+# 导入自定义异常
+from utils.exceptions import AppError, ValidationError, AuthenticationError, DatabaseError
+
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/login', methods=['GET','POST'])
@@ -13,20 +16,23 @@ def login():
     if request.method == 'POST':
         user = request.form['user']
         pwd = request.form['pwd']
+        
+        # 验证输入
         error = validate_username(user)
-        if error: return f"<h3>{error}</h3>"
+        if error: raise ValidationError(error)
         error = validate_password(pwd)
-        if error: return f"<h3>{error}</h3>"
+        if error: raise ValidationError(error)
 
         db = get_db_connection()
         cursor = db.cursor()
         cursor.execute("SELECT id, username, banned FROM users WHERE username=%s AND password=%s", (user,pwd))
         res = cursor.fetchone()
         db.close()
+        
         if res:
             # 检查用户是否被封禁
             if res[2]:  # res[2]是banned字段
-                return "<h3>账号已被封禁，无法登录</h3>"
+                raise AuthenticationError("账号已被封禁，无法登录")
             
             session['user'] = user
             # 记录登录日志，res[0]是用户ID，res[1]是用户名
@@ -39,7 +45,7 @@ def login():
             )
             return redirect("/")
         else:
-            return "<h3>账号或密码错误</h3>"
+            raise AuthenticationError("账号或密码错误")
     return '''
     <!DOCTYPE html>
     <html>
@@ -96,17 +102,21 @@ def reg():
     if request.method == 'POST':
         user = request.form['user']
         pwd = request.form['pwd']
+        
+        # 验证输入
         error = validate_username(user)
-        if error: return f"<h3>{error}</h3>"
+        if error: raise ValidationError(error)
         error = validate_password(pwd)
-        if error: return f"<h3>{error}</h3>"
+        if error: raise ValidationError(error)
 
+        db = get_db_connection()
+        cursor = db.cursor()
+        
         try:
-            db = get_db_connection()
-            cursor = db.cursor()
             cursor.execute("INSERT INTO users (username,password) VALUES (%s,%s)", (user,pwd))
             db.commit()
             db.close()
+            
             # 记录注册日志
             log_user_action(
                 username=user,
@@ -115,11 +125,14 @@ def reg():
                 user_agent=request.headers.get('User-Agent')
             )
             return redirect("/login")
+            
         except Exception as e:
+            db.rollback()
+            db.close()
             if "Duplicate" in str(e):
-                return "<h3>用户名已存在！</h3>"
+                raise ValidationError("用户名已存在")
             else:
-                return f"<h3>注册失败：{str(e)}</h3>"
+                raise DatabaseError("注册失败")
     return '''
     <!DOCTYPE html>
     <html>

@@ -1,5 +1,8 @@
 # 个人中心路由
-from flask import Blueprint, request, redirect, render_template_string, session, send_from_directory
+from flask import Blueprint, request, redirect, render_template_string, session, send_from_directory, jsonify
+
+# 导入自定义异常
+from utils.exceptions import AppError, ValidationError, AuthenticationError, DatabaseError
 from models.database import get_db_connection
 from models.user import get_user_profiles, clear_user_profile_cache, resolve_avatar_url
 from utils.helpers import html_escape
@@ -220,6 +223,7 @@ def profile():
                 <div class="sidebar-module" style="margin-top:32px">
                     <a href="/" class="sidebar-ghost-btn">返回首页</a>
                     <a href="/logout" class="sidebar-ghost-btn">退出登录</a>
+                    <button class="sidebar-ghost-btn" onclick="openDeleteModal()" style="background:rgba(239,68,68,0.2);border-color:rgba(239,68,68,0.4);color:#ef4444;margin-top:24px;">删除账号</button>
                 </div>
             </div>
         </div>
@@ -270,6 +274,34 @@ def profile():
                             <button class="sidebar-ghost-btn" onclick="resetCustomAvatar()" style="flex:1">重新选择</button>
                             <button class="sidebar-ghost-btn" onclick="closeCustomAvatarModal()" style="flex:1">取消</button>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 删除账号确认弹窗 -->
+        <div id="deleteModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">删除账号</h3>
+                    <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div style="color:#ef4444;font-weight:700;margin-bottom:16px;">⚠️ 危险操作</div>
+                    <p style="margin-bottom:16px;color:#9ca3af;">删除账号后将无法恢复，所有数据将被永久删除：</p>
+                    <ul style="color:#9ca3af;margin-left:20px;margin-bottom:20px;">
+                        <li>个人资料和头像</li>
+                        <li>创建的房间</li>
+                        <li>聊天记录</li>
+                        <li>所有相关数据</li>
+                    </ul>
+                    
+                    <div class="sidebar-label">确认密码</div>
+                    <input type="password" id="deletePassword" placeholder="请输入当前密码确认删除" class="sidebar-input" style="margin-bottom:16px;">
+                    
+                    <div style="display:flex;gap:12px;">
+                        <button class="sidebar-btn" onclick="confirmDeleteAccount()" style="background:rgba(239,68,68,0.3);border-color:rgba(239,68,68,0.5);color:#ef4444;flex:1;">确认删除</button>
+                        <button class="sidebar-ghost-btn" onclick="closeDeleteModal()" style="flex:1;">取消</button>
                     </div>
                 </div>
             </div>
@@ -414,6 +446,61 @@ def profile():
             }}
         }}
         
+        // 删除账号相关函数
+        function openDeleteModal() {{
+            document.getElementById('deleteModal').style.display = 'block';
+            document.getElementById('deletePassword').value = '';
+        }}
+        
+        function closeDeleteModal() {{
+            document.getElementById('deleteModal').style.display = 'none';
+            document.getElementById('deletePassword').value = '';
+        }}
+        
+        async function confirmDeleteAccount() {{
+            const password = document.getElementById('deletePassword').value;
+            
+            if (!password) {{
+                alert('请输入密码确认删除操作');
+                return;
+            }}
+            
+            if (!confirm('再次确认：删除账号后无法恢复，确定要继续吗？')) {{
+                return;
+            }}
+            
+            try {{
+                const response = await fetch('/delete_account', {{
+                    method: 'POST',
+                    headers: {{
+                        'Content-Type': 'application/json'
+                    }},
+                    body: JSON.stringify({{ password: password }})
+                }});
+                
+                if (!response.ok) {{
+                    throw new Error(`HTTP error! status: ${{response.status}}`);
+                }}
+                
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {{
+                    throw new Error('服务器返回了非JSON响应');
+                }}
+                
+                const data = await response.json();
+                
+                if (data.success) {{
+                    alert('账号已成功删除');
+                    window.location.href = '/'; // 跳转到首页
+                }} else {{
+                    alert(data.error || '删除失败');
+                }}
+            }} catch (error) {{
+                console.error('删除账号错误:', error);
+                alert('删除失败: ' + error.message);
+            }}
+        }}
+        
         window.onclick = function(event) {{
             const modal = document.getElementById('avatarModal');
             if (event.target === modal) {{
@@ -422,6 +509,10 @@ def profile():
             const customModal = document.getElementById('customAvatarModal');
             if (event.target === customModal) {{
                 closeCustomAvatarModal();
+            }}
+            const deleteModal = document.getElementById('deleteModal');
+            if (event.target === deleteModal) {{
+                closeDeleteModal();
             }}
         }}
     </script>
@@ -450,23 +541,21 @@ def change_password():
     from utils.validators import validate_password
     error = validate_password(new_password)
     if error:
-        return f"<h3>{error}</h3>"
+        raise ValidationError(error)
+
+    db = get_db_connection()
+    cursor = db.cursor()
 
     try:
-        db = get_db_connection()
-        cursor = db.cursor()
-
         # 验证旧密码
         cursor.execute("SELECT password FROM users WHERE username=%s", (username,))
         result = cursor.fetchone()
 
         if not result:
-            db.close()
-            return "<h3>用户不存在</h3>"
+            raise AuthenticationError("用户不存在")
 
         if result[0] != old_password:
-            db.close()
-            return "<h3>当前密码错误</h3>"
+            raise AuthenticationError("当前密码错误")
 
         # 更新新密码
         cursor.execute("UPDATE users SET password=%s WHERE username=%s", (new_password, username))
@@ -476,8 +565,10 @@ def change_password():
         return "<h3>密码修改成功，请重新登录</h3><script>setTimeout(function(){window.location='/logout'}, 2000);</script>"
 
     except Exception as e:
+        db.rollback()
+        db.close()
         print(f"修改密码失败: {e}")
-        return f"<h3>修改密码失败：{str(e)}</h3>"
+        raise DatabaseError("修改密码失败")
 
 @profile_bp.route('/update_avatar', methods=['POST'])
 def update_avatar():
@@ -521,7 +612,7 @@ def update_avatar():
                     avatar_path = f"/avatars/{filename}"
                 except Exception as e:
                     print(f"头像处理失败: {e}")
-                    return "error", 500
+                    raise DatabaseError("头像处理失败")
 
     if avatar_path:
         try:
@@ -543,9 +634,66 @@ def update_avatar():
                 new_path = os.path.join(AVATAR_DIR, filename)
                 if os.path.exists(new_path):
                     os.remove(new_path)
-            return "error", 500
+            raise DatabaseError("更新头像失败")
     
     return "success"
+
+@profile_bp.route('/delete_account', methods=['POST'])
+def delete_account():
+    """用户自我删除账号 - 使用新的错误处理机制"""
+    
+    # 检查登录状态
+    if "user" not in session:
+        raise AuthenticationError("请先登录")
+    
+    username = session["user"]
+    
+    # 获取请求数据
+    data = request.get_json()
+    if not data:
+        raise ValidationError("请求数据格式错误")
+        
+    password = data.get('password', '')
+    if not password:
+        raise ValidationError("请输入密码")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # 验证用户存在和密码
+        cursor.execute("SELECT password, role FROM users WHERE username = %s", (username,))
+        result = cursor.fetchone()
+        
+        if not result:
+            raise AuthenticationError("用户不存在")
+        
+        stored_password, user_role = result
+        
+        if stored_password != password:
+            raise AuthenticationError("密码错误")
+        
+        # 检查管理员权限
+        if user_role == 'admin':
+            raise AuthorizationError("管理员账号不能删除")
+        
+        # 删除用户相关数据
+        cursor.execute("DELETE FROM rooms WHERE owner = %s", (username,))
+        cursor.execute("DELETE FROM users WHERE username = %s", (username,))
+        
+        conn.commit()
+        conn.close()
+        
+        # 清除session
+        session.pop('user', None)
+        
+        return jsonify({'success': True, 'message': '账号删除成功'})
+        
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        print(f"删除用户数据失败: {e}")
+        raise DatabaseError("删除失败，请稍后重试")
 
 @profile_bp.route('/user/<username>')
 def user_public(username):

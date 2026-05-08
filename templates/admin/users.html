@@ -163,6 +163,159 @@
         .status-banned { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); }
 
         .action-btn:hover { filter: brightness(1.1); }
+        
+        /* 模态框样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+        }
+        
+        .modal.show {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            background: rgba(26, 16, 37, 0.95);
+            border: 1px solid rgba(255, 85, 85, 0.3);
+            border-radius: 12px;
+            padding: 30px;
+            width: 90%;
+            max-width: 500px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .modal-title {
+            color: #fff;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 24px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            color: #9ca3af;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: block;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(26, 16, 37, 0.6);
+            border: 1px solid rgba(255, 85, 85, 0.3);
+            border-radius: 8px;
+            color: #e5e7eb;
+            font-size: 14px;
+            outline: none;
+        }
+        
+        .form-input:focus {
+            border-color: rgba(255, 85, 85, 0.5);
+            box-shadow: 0 0 0 3px rgba(255, 85, 85, 0.1);
+        }
+        
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 24px;
+        }
+        
+        .modal-btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+            border: none;
+        }
+        
+        .btn-cancel {
+            background: rgba(107, 114, 128, 0.2);
+            color: #cbd5e1;
+            border: 1px solid rgba(156, 163, 175, 0.4);
+        }
+        
+        .btn-cancel:hover {
+            background: rgba(107, 114, 128, 0.3);
+            border-color: rgba(156, 163, 175, 0.5);
+        }
+        
+        .btn-save {
+            background: rgba(255, 85, 85, 0.3);
+            color: #FF5555;
+            border: 1px solid rgba(255, 85, 85, 0.4);
+        }
+        
+        .btn-save:hover {
+            background: rgba(255, 85, 85, 0.5);
+            border-color: rgba(255, 85, 85, 0.6);
+        }
+        
+        .btn-create {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.4);
+        }
+        
+        .btn-create:hover {
+            background: rgba(16, 185, 129, 0.3);
+            border-color: rgba(16, 185, 129, 0.5);
+        }
+        
+        .search-box {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .search-input {
+            padding: 10px 16px;
+            background: rgba(26, 16, 37, 0.6);
+            border: 1px solid rgba(255, 85, 85, 0.3);
+            border-radius: 8px;
+            color: #e5e7eb;
+            font-size: 14px;
+            outline: none;
+            flex: 1;
+            max-width: 300px;
+        }
+
+        .search-input:focus {
+            border-color: rgba(255, 85, 85, 0.5);
+            box-shadow: 0 0 0 3px rgba(255, 85, 85, 0.1);
+        }
+
+        .search-btn {
+            padding: 10px 20px;
+            background: rgba(255, 85, 85, 0.2);
+            color: #FF5555;
+            border: 1px solid rgba(255, 85, 85, 0.4);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .search-btn:hover {
+            background: rgba(255, 85, 85, 0.3);
+            border-color: rgba(255, 85, 85, 0.6);
+        }
     </style>
 </head>
 <body>
@@ -174,17 +327,22 @@
     <div class="container">
         <div class="header">
             <h1>用户列表</h1>
-            <div class="search-box">
-                <input type="text" id="searchInput" class="search-input" placeholder="搜索用户（昵称/账号/ID）" onkeypress="handleSearchKeypress(event)">
-                <button class="search-btn" onclick="searchUsers()">搜索</button>
-                <button class="search-btn" onclick="resetSearch()">重置</button>
+            <div>
+                <button class="nav-btn btn-create" onclick="openUserModal()">+ 新增用户</button>
             </div>
         </div>
         <div class="nav" style="margin-bottom: 24px;">
             <button class="nav-btn" onclick="window.location.href='/admin'">概览</button>
             <button class="nav-btn active">用户管理</button>
+            <button class="nav-btn" onclick="window.location.href='/admin/logs'">日志管理</button>
             <button class="nav-btn" onclick="window.location.href='/admin/rooms'">房间管理</button>
             <button class="nav-btn" onclick="window.location.href='/admin/fortresses'">据点管理</button>
+        </div>
+        
+        <div class="search-box" style="margin-bottom: 24px;">
+            <input type="text" id="searchInput" class="search-input" placeholder="搜索用户（昵称/账号/ID）" onkeypress="handleSearchKeypress(event)">
+            <button class="search-btn" onclick="searchUsers()">搜索</button>
+            <button class="search-btn" onclick="resetSearch()">重置</button>
         </div>
         
         <div class="table-container">
@@ -231,6 +389,38 @@
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+    </div>
+    
+    <!-- 新增用户模态框 -->
+    <div class="modal" id="userModal">
+        <div class="modal-content">
+            <div class="modal-title">新增用户</div>
+            <form id="userForm">
+                <div class="form-group">
+                    <label class="form-label">用户名</label>
+                    <input type="text" class="form-input" id="newUsername" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">昵称</label>
+                    <input type="text" class="form-input" id="newNickname">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">密码</label>
+                    <input type="password" class="form-input" id="newPassword" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">角色</label>
+                    <select class="form-input" id="newRole">
+                        <option value="user">普通用户</option>
+                        <option value="admin">管理员</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="modal-btn btn-cancel" onclick="closeUserModal()">取消</button>
+                    <button type="submit" class="modal-btn btn-save">保存</button>
+                </div>
+            </form>
         </div>
     </div>
     
@@ -437,6 +627,66 @@
                 alert('解禁失败: ' + error.message);
             }
         }
+        
+        // 新增用户相关函数
+        function openUserModal() {
+            document.getElementById('userModal').classList.add('show');
+            document.getElementById('userForm').reset();
+        }
+        
+        function closeUserModal() {
+            document.getElementById('userModal').classList.remove('show');
+            document.getElementById('userForm').reset();
+        }
+        
+        // 处理新增用户表单提交
+        document.getElementById('userForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('newUsername').value.trim();
+            const nickname = document.getElementById('newNickname').value.trim();
+            const password = document.getElementById('newPassword').value;
+            const role = document.getElementById('newRole').value;
+            
+            if (!username || !password) {
+                alert('用户名和密码不能为空');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/admin/api/user/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        nickname: nickname,
+                        password: password,
+                        role: role
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('用户创建成功');
+                    closeUserModal();
+                    location.reload(); // 刷新页面以显示新用户
+                } else {
+                    alert(data.error || '创建用户失败');
+                }
+            } catch (error) {
+                alert('创建用户失败: ' + error.message);
+            }
+        });
+        
+        // 点击模态框外部关闭
+        document.getElementById('userModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeUserModal();
+            }
+        });
     </script>
 </body>
 </html>

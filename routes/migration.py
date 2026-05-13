@@ -95,7 +95,7 @@ def execute_migration():
     """执行密码迁移"""
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor()
         
         # 获取所有明文密码用户
         cursor.execute("""
@@ -111,9 +111,9 @@ def execute_migration():
         failed_users = []
         
         for user in users:
-            user_id = user['id']
-            username = user['username']
-            password = user['password']
+            user_id = user[0]
+            username = user[1]
+            password = user[2]
             
             try:
                 # 加密密码
@@ -157,7 +157,7 @@ def verify_migration():
     try:
         # 测试几个用户的密码验证
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor()
         
         cursor.execute("SELECT username, password FROM users LIMIT 5")
         users = cursor.fetchall()
@@ -165,8 +165,8 @@ def verify_migration():
         verification_results = []
         
         for user in users:
-            username = user['username']
-            stored_password = user['password']
+            username = user[0]
+            stored_password = user[1]
             
             # 检查是否为bcrypt格式
             is_hashed = is_hashed_password(stored_password)

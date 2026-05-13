@@ -64,13 +64,20 @@ app.register_blueprint(migration_bp)
 
 # 初始化数据库结构
 _db_initialized = False
+_migration_completed = False
 
 @app.before_request
 def _init_database():
-    global _db_initialized
+    global _db_initialized, _migration_completed
     if not _db_initialized:
         init_database()
         _db_initialized = True
+        
+        # 执行自动密码迁移
+        if not _migration_completed:
+            from utils.auto_migration import run_auto_migration
+            run_auto_migration()
+            _migration_completed = True
 
 @app.before_request
 def _init_profile_schema():

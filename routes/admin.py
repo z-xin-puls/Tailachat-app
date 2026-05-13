@@ -11,6 +11,9 @@ from utils.helpers import html_escape
 # 导入自定义异常
 from utils.exceptions import AppError, ValidationError, AuthenticationError, DatabaseError
 
+# 导入密码工具
+from utils.password import hash_password, verify_password
+
 admin_bp = Blueprint('admin', __name__)
 
 @admin_bp.route('/admin')
@@ -312,8 +315,9 @@ def reset_user_password(username):
             conn.close()
             return jsonify({'success': False, 'error': '用户不存在'})
 
-        # 重置密码为123456
-        cursor.execute("UPDATE users SET password = %s WHERE username = %s", ('123456', username))
+        # 重置密码为123456（加密后存储）
+        hashed_password = hash_password('123456')
+        cursor.execute("UPDATE users SET password = %s WHERE username = %s", (hashed_password, username))
         conn.commit()
         conn.close()
 
@@ -434,11 +438,12 @@ def create_user():
         if cursor.fetchone():
             raise ValidationError("用户名已存在")
 
-        # 创建用户
+        # 创建用户（密码加密）
+        hashed_password = hash_password(password)
         cursor.execute("""
             INSERT INTO users (username, nickname, password, role)
             VALUES (%s, %s, %s, %s)
-        """, (username, nickname, password, role))
+        """, (username, nickname, hashed_password, role))
         conn.commit()
         conn.close()
 

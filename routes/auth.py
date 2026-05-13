@@ -9,6 +9,9 @@ from utils.logger import log_user_action
 # 导入自定义异常
 from utils.exceptions import AppError, ValidationError, AuthenticationError, DatabaseError
 
+# 导入密码工具
+from utils.password import hash_password, verify_password
+
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/login', methods=['GET','POST'])
@@ -25,20 +28,26 @@ def login():
 
         db = get_db_connection()
         cursor = db.cursor()
-        cursor.execute("SELECT id, username, banned FROM users WHERE username=%s AND password=%s", (user,pwd))
+        cursor.execute("SELECT id, username, banned, password FROM users WHERE username=%s", (user,))
         res = cursor.fetchone()
         db.close()
         
         if res:
+            # 验证密码
+            user_id, username, banned, stored_password = res
+            
+            if not verify_password(pwd, stored_password):
+                raise AuthenticationError("账号或密码错误")
+            
             # 检查用户是否被封禁
-            if res[2]:  # res[2]是banned字段
+            if banned:  # banned字段
                 raise AuthenticationError("账号已被封禁，无法登录")
             
-            session['user'] = user
-            # 记录登录日志，res[0]是用户ID，res[1]是用户名
+            session['user'] = username
+            # 记录登录日志
             log_user_action(
-                user_id=res[0],
-                username=res[1],
+                user_id=user_id,
+                username=username,
                 action_type='login',
                 ip=request.remote_addr,
                 user_agent=request.headers.get('User-Agent')
@@ -113,7 +122,9 @@ def reg():
         cursor = db.cursor()
         
         try:
-            cursor.execute("INSERT INTO users (username,password) VALUES (%s,%s)", (user,pwd))
+            # 加密密码
+            hashed_password = hash_password(pwd)
+            cursor.execute("INSERT INTO users (username,password) VALUES (%s,%s)", (user,hashed_password))
             db.commit()
             db.close()
             

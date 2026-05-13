@@ -42,6 +42,7 @@ from routes.auth import auth_bp
 from routes.main import main_bp
 from routes.profile import profile_bp
 from routes.admin import admin_bp
+from routes.migration import migration_bp
 
 # 创建Flask应用
 app = Flask(__name__)
@@ -59,6 +60,7 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(main_bp)
 app.register_blueprint(profile_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(migration_bp)
 
 # 初始化数据库结构
 _db_initialized = False

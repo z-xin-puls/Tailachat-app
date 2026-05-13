@@ -3,6 +3,9 @@ from flask import Blueprint, request, redirect, render_template_string, session,
 
 # 导入自定义异常
 from utils.exceptions import AppError, ValidationError, AuthenticationError, DatabaseError
+
+# 导入密码工具
+from utils.password import hash_password, verify_password
 from models.database import get_db_connection
 from models.user import get_user_profiles, clear_user_profile_cache, resolve_avatar_url
 from utils.helpers import html_escape
@@ -554,11 +557,13 @@ def change_password():
         if not result:
             raise AuthenticationError("用户不存在")
 
-        if result[0] != old_password:
+        stored_password = result[0]
+        if not verify_password(old_password, stored_password):
             raise AuthenticationError("当前密码错误")
 
-        # 更新新密码
-        cursor.execute("UPDATE users SET password=%s WHERE username=%s", (new_password, username))
+        # 更新新密码（加密后存储）
+        hashed_new_password = hash_password(new_password)
+        cursor.execute("UPDATE users SET password=%s WHERE username=%s", (hashed_new_password, username))
         db.commit()
         db.close()
 
@@ -670,7 +675,7 @@ def delete_account():
         
         stored_password, user_role = result
         
-        if stored_password != password:
+        if not verify_password(password, stored_password):
             raise AuthenticationError("密码错误")
         
         # 检查管理员权限

@@ -300,6 +300,39 @@ class WebRTCManager {
     onRemoteStream(callback) {
         this.onRemoteStreamCallback = callback;
     }
+
+    // 房主踢人
+    kickUser(targetUsername) {
+        if (this.socket && this.roomConfig) {
+            this.socket.emit('kick_user', {
+                room_id: this.roomConfig.roomId,
+                owner_username: this.roomConfig.currentUser,
+                target_username: targetUsername
+            });
+        }
+    }
+
+    // 房主禁言/解除禁言
+    muteUser(targetUsername, mute) {
+        if (this.socket && this.roomConfig) {
+            this.socket.emit('mute_user', {
+                room_id: this.roomConfig.roomId,
+                owner_username: this.roomConfig.currentUser,
+                target_username: targetUsername,
+                mute: mute
+            });
+        }
+    }
+
+    // 检查禁言状态
+    checkMuteStatus() {
+        if (this.socket && this.roomConfig) {
+            this.socket.emit('check_mute_status', {
+                room_id: this.roomConfig.roomId,
+                username: this.roomConfig.currentUser
+            });
+        }
+    }
 }
 
 // 导出单例实例

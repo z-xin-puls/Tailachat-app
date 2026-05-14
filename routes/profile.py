@@ -2,7 +2,7 @@
 from flask import Blueprint, request, redirect, render_template_string, session, send_from_directory, jsonify
 
 # 导入自定义异常
-from utils.exceptions import AppError, ValidationError, AuthenticationError, DatabaseError
+from utils.exceptions import AppError, ValidationError, AuthenticationError, AuthorizationError, DatabaseError
 
 # 导入密码工具
 from utils.password import hash_password, verify_password
@@ -708,11 +708,10 @@ def user_public(username):
     info = cursor.fetchone()
     rooms = []
     try:
-        cursor2 = db.cursor()
-        cursor2.execute("SELECT id,name FROM rooms WHERE owner=%s", (username,))
-        rooms = cursor2.fetchall()
-    except:
-        pass
+        cursor.execute("SELECT id, name FROM rooms WHERE owner=%s", (username,))
+        rooms = cursor.fetchall()
+    except Exception as e:
+        print(f"获取用户房间失败: {e}")
     db.close()
     if not info:
         return "<h3>用户不存在</h3>"
@@ -720,7 +719,7 @@ def user_public(username):
     nick = (info.get("nickname") or "").strip()
     avatar = resolve_avatar_url(info.get("avatar"))
     display = nick if nick else info["username"]
-    room_items = "".join([f"<li><a href='/room/{r[0]}'>{html_escape(r[1])}（ID {r[0]}）</a></li>" for r in rooms]) or "<li>暂无房间</li>"
+    room_items = "".join([f"<li><a href='/room/{r['id']}'>{html_escape(r['name'])}（ID {r['id']}）</a></li>" for r in rooms]) or "<li>暂无房间</li>"
 
     html = f'''
     <!DOCTYPE html>

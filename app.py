@@ -53,6 +53,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 # 全局变量
 chat_rooms = {}
 chat_lock = threading.Lock()
+muted_users = {}  # 存储禁言用户 {room_id: {username: True}}
 
 # 注册蓝图
 app.register_blueprint(auth_bp)
@@ -188,12 +189,26 @@ def room(id):
     self_prof = profiles.get(user) or {}
     self_display = (self_prof.get("nickname") or user)
 
+    # 判断当前用户是否为房主
+    is_owner = False
+    try:
+        db = get_db_connection()
+        cursor = db.cursor()
+        cursor.execute("SELECT owner FROM rooms WHERE id = %s", (id,))
+        result = cursor.fetchone()
+        if result and result[0] == user:
+            is_owner = True
+        db.close()
+    except Exception as e:
+        print(f"检查房主身份失败: {e}")
+
     # 生成member_items HTML
     member_items = ""
     for u in sorted(all_users):
         safe_u = u.replace("'", "").replace('"', "")
         label = format_user_label(u, profiles.get(u))
         info_link = f"<a class='user-info' href='/user/{safe_u}' onclick=\"event.stopPropagation();\">资料</a>"
+        
         if u in voice_users:
             member_items += f"<li class='user-item voice' onclick=\"openVolumePanel('{safe_u}')\"><div class='user-main'><span class='badge badge-teal'>语音</span>{label}</div><div class='user-meta'>✅ {info_link}</div></li>"
         else:
@@ -232,7 +247,8 @@ def room(id):
                          current_user=self_display,
                          user_count=count,
                          member_items=member_items,
-                         portrait_config=portrait_config)
+                         portrait_config=portrait_config,
+                         is_owner=is_owner)
 
 @app.route('/leave-room/<room_id>')
 def leave_room(room_id):
@@ -422,8 +438,17 @@ def handle_disconnect():
             if room_id in username_to_sid and username in username_to_sid[room_id]:
                 del username_to_sid[room_id][username]
             print(f'[DEBUG] 用户离开语音房间 - 房间: {room_id}, 用户: {username}')
-            # 通知房间内其他用户
-            emit('user_left', {'username': username}, room=room_id, skip_sid=request.sid)
+            # 获取房间信息和房主
+            from models.room import get_room_by_id
+            room_info = get_room_by_id(room_id)
+            room_owner = room_info['owner'] if room_info else None
+            
+            # 通知房间内其他用户（包含房主信息）
+            is_user_owner = (username == room_owner)
+            emit('user_left', {
+                'username': username,
+                'is_owner': is_user_owner
+            }, room=room_id, skip_sid=request.sid)
 
 @socketio.on('join_voice_room')
 def handle_join_voice_room(data):
@@ -450,16 +475,33 @@ def handle_join_voice_room(data):
     username_to_sid[room_id][username] = request.sid
     print(f'[DEBUG] 用户信息已记录 - SID: {request.sid}, 用户名: {username}')
 
-    # 获取房间内现有用户
-    existing_users = [u for sid, u in socket_room_users[room_id].items() if sid != request.sid]
+    # 获取房间信息和房主
+    from models.room import get_room_by_id
+    room_info = get_room_by_id(room_id)
+    room_owner = room_info['owner'] if room_info else None
+    
+    # 获取房间内现有用户（包含房主信息）
+    existing_users = []
+    for sid, user_name in socket_room_users[room_id].items():
+        if sid != request.sid:
+            is_owner = (user_name == room_owner)
+            existing_users.append({
+                'username': user_name,
+                'is_owner': is_owner
+            })
+    
     print(f'[DEBUG] 房间内现有用户: {existing_users}')
 
-    # 通知房间内其他用户有新用户加入
-    emit('user_joined', {'username': username}, room=room_id, skip_sid=request.sid)
+    # 通知房间内其他用户有新用户加入（包含房主信息）
+    is_new_user_owner = (username == room_owner)
+    emit('user_joined', {
+        'username': username,
+        'is_owner': is_new_user_owner
+    }, room=room_id, skip_sid=request.sid)
     print(f'[DEBUG] 已通知其他用户新用户加入')
 
-    # 发送现有用户列表给新用户
-    emit('room_users', {'users': existing_users})
+    # 发送现有用户列表给新用户（包含房主信息）
+    emit('room_users', {'users': existing_users, 'room_owner': room_owner})
     print(f'[DEBUG] 已发送用户列表给新用户')
 
     print(f'用户 {username} 加入语音房间 {room_id}')
@@ -604,10 +646,17 @@ def handle_join_chat_room(data):
     # 加入SocketIO房间
     join_room(room_id)
 
-    # 通知房间内其他用户有新用户访问
+    # 获取房间信息和房主
+    from models.room import get_room_by_id
+    room_info = get_room_by_id(room_id)
+    room_owner = room_info['owner'] if room_info else None
+    
+    # 通知房间内其他用户有新用户访问（包含房主信息）
+    is_user_owner = (username == room_owner)
     emit('user_joined_room', {
         'username': username,
-        'room_id': room_id
+        'room_id': room_id,
+        'is_owner': is_user_owner
     }, room=room_id, include_self=False)
 
     # 发送房间历史消息
@@ -628,6 +677,11 @@ def handle_send_chat_message(data):
     text = data.get('text')
 
     if not room_id or not username or not text:
+        return
+
+    # 检查用户是否被禁言
+    if room_id in muted_users and username in muted_users[room_id] and muted_users[room_id][username]:
+        emit('chat_error', {'error': '您已被禁言，无法发送消息'})
         return
 
     text = str(text).strip()
@@ -681,6 +735,130 @@ def handle_send_chat_message(data):
         action_detail={'room_id': room_id, 'message': text},
         ip=request.remote_addr if hasattr(request, 'remote_addr') else None
     )
+
+# ======================
+# SocketIO事件处理器 - 房间管理（房主功能）
+# ======================
+
+@socketio.on('kick_user')
+def handle_kick_user(data):
+    """房主踢人功能"""
+    room_id = data.get('room_id')
+    owner_username = data.get('owner_username')
+    target_username = data.get('target_username')
+
+    if not room_id or not owner_username or not target_username:
+        emit('kick_error', {'error': '参数不完整'})
+        return
+
+    # 验证房主身份
+    room_info = get_room_by_id(room_id)
+    if not room_info or room_info['owner'] != owner_username:
+        emit('kick_error', {'error': '您不是房主，无法执行此操作'})
+        return
+
+    if owner_username == target_username:
+        emit('kick_error', {'error': '不能踢自己'})
+        return
+
+    # 找到被踢用户的sid并断开连接
+    target_sid = None
+    if room_id in username_to_sid and target_username in username_to_sid[room_id]:
+        target_sid = username_to_sid[room_id][target_username]
+
+    if target_sid:
+        # 发送被踢通知
+        emit('user_kicked', {
+            'room_id': room_id,
+            'reason': '被房主移出房间'
+        }, to=target_sid)
+        
+        # 从房间用户列表中移除
+        if room_id in room_users:
+            room_users[room_id].discard(target_username)
+        
+        # 从语音房间用户列表中移除
+        if room_id in socket_room_users and target_sid in socket_room_users[room_id]:
+            del socket_room_users[room_id][target_sid]
+        
+        # 从用户名到sid映射中移除
+        if room_id in username_to_sid and target_username in username_to_sid[room_id]:
+            del username_to_sid[room_id][target_username]
+        
+        # 通知其他用户
+        emit('user_left_room', {
+            'username': target_username,
+            'reason': '被房主移出'
+        }, room=room_id, include_self=False)
+        
+        print(f'房主 {owner_username} 在房间 {room_id} 踢出了用户 {target_username}')
+    else:
+        emit('kick_error', {'error': '用户不在线'})
+
+@socketio.on('mute_user')
+def handle_mute_user(data):
+    """房主禁言/解除禁言功能"""
+    room_id = data.get('room_id')
+    owner_username = data.get('owner_username')
+    target_username = data.get('target_username')
+    mute = data.get('mute', True)
+
+    if not room_id or not owner_username or not target_username:
+        emit('mute_error', {'error': '参数不完整'})
+        return
+
+    # 验证房主身份
+    room_info = get_room_by_id(room_id)
+    if not room_info or room_info['owner'] != owner_username:
+        emit('mute_error', {'error': '您不是房主，无法执行此操作'})
+        return
+
+    if owner_username == target_username:
+        emit('mute_error', {'error': '不能禁言自己'})
+        return
+
+    # 初始化房间禁言列表
+    if room_id not in muted_users:
+        muted_users[room_id] = {}
+
+    # 设置禁言状态
+    muted_users[room_id][target_username] = mute
+
+    # 通知被禁言用户
+    target_sid = None
+    for users in username_to_sid.values():
+        if target_username in users:
+            target_sid = users[target_username]
+            break
+
+    if target_sid:
+        emit('mute_status_changed', {
+            'muted': mute,
+            'room_id': room_id
+        }, to=target_sid)
+
+    # 通知房主操作成功
+    emit('mute_success', {
+        'target_username': target_username,
+        'muted': mute
+    })
+
+    print(f'房主 {owner_username} 在房间 {room_id} {"禁言" if mute else "解除禁言"}了用户 {target_username}')
+
+@socketio.on('check_mute_status')
+def handle_check_mute_status(data):
+    """检查用户禁言状态"""
+    room_id = data.get('room_id')
+    username = data.get('username')
+
+    if not room_id or not username:
+        return
+
+    is_muted = False
+    if room_id in muted_users and username in muted_users[room_id]:
+        is_muted = muted_users[room_id][username]
+
+    emit('mute_status', {'muted': is_muted})
 
 if __name__ == '__main__':
     import logging

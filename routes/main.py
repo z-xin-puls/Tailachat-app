@@ -51,21 +51,21 @@ def index():
     fortress_list = []
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT id, name, x, y, radius, color, description, image FROM fortresses ORDER BY id")
         fortresses = cursor.fetchall()
 
         # 转换为字典格式
         for fortress in fortresses:
             fortress_dict = {
-                'id': fortress[0],
-                'name': fortress[1],
-                'x': float(fortress[2]),
-                'y': float(fortress[3]),
-                'radius': float(fortress[4]),
-                'color': fortress[5],
-                'description': fortress[6] if fortress[6] else '',
-                'image': fortress[7] if fortress[7] else None
+                'id': fortress['id'],
+                'name': fortress['name'],
+                'x': float(fortress['x']),
+                'y': float(fortress['y']),
+                'radius': float(fortress['radius']),
+                'color': fortress['color'],
+                'description': fortress['description'] if fortress['description'] else '',
+                'image': fortress['image'] if fortress['image'] else None
             }
             fortress_list.append(fortress_dict)
 
@@ -125,7 +125,7 @@ def create_fortress_room():
 @main_bp.route('/api/fortress_rooms/<int:fortress_id>')
 def get_fortress_rooms(fortress_id):
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
 
     try:
         # 查询指定据点的房间
@@ -141,10 +141,10 @@ def get_fortress_rooms(fortress_id):
 
         for row in rows:
             rooms.append({
-                'id': row[0],
-                'name': row[1],
-                'owner': row[2],
-                'fortress_id': row[3],
+                'id': row['id'],
+                'name': row['name'],
+                'owner': row['owner'],
+                'fortress_id': row['fortress_id'],
                 'online_count': 0  # 移除HTTP请求以提升性能
             })
 

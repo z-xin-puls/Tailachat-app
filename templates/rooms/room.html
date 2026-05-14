@@ -136,6 +136,12 @@
                 <div class="sidebar-hint">点击调节音量</div>
             </div>
             <ul id="user-list" class="user-list">{{ member_items|safe }}</ul>
+            {% if is_owner %}
+            <div class="owner-tools">
+                <div class="owner-tools-label">👑 房主管理</div>
+                <div class="owner-tools-hint">右键用户进行管理操作</div>
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -184,6 +190,23 @@
                     <input id="play-slider" class="slider" type="range" min="0" max="200" value="100">
                     <div id="play-hint" class="hint" style="margin-top:8px"></div>
                 </div>
+
+                <!-- 房主管理功能 -->
+                <div id="owner-controls" class="section owner-controls" style="display: none;">
+                    <div class="row" style="margin-bottom: 12px;">
+                        <div style="color:#FF5555; font-weight: 700;">👑 房主管理</div>
+                    </div>
+                    <div class="owner-actions-panel">
+                        <button class="owner-action-btn mute-btn" id="mute-user-btn" onclick="handleMuteUser()">
+                            <span class="btn-icon">🔇</span>
+                            <span class="btn-text">禁言</span>
+                        </button>
+                        <button class="owner-action-btn kick-btn" id="kick-user-btn" onclick="handleKickUser()">
+                            <span class="btn-icon">👢</span>
+                            <span class="btn-text">踢出</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -195,7 +218,8 @@
     <script>
         const ROOM_CONFIG = {
             roomId: {{ room_id }},
-            currentUser: '{{ current_user }}'
+            currentUser: '{{ current_user }}',
+            isOwner: {{ 'true' if is_owner else 'false' }}
         };
         const PORTRAIT_CONFIG = {{ portrait_config|tojson|safe }};
     </script>

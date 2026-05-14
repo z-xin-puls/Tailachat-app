@@ -1,6 +1,8 @@
 // 房间页面JavaScript
 let currentTarget = '';
 const selfUser = ROOM_CONFIG.currentUser;
+let isMuted = false;  // 当前用户是否被禁言
+let isRoomOwner = ROOM_CONFIG.isOwner || false;  // 当前用户是否是房主
 
 // 动态加载脚本
 let trtcLoaded = false;
@@ -483,6 +485,14 @@ function openVolumePanel(u) {
         playHint.innerText = '';
     }
 
+    // 显示/隐藏房主管理按钮
+    const ownerControls = document.getElementById('owner-controls');
+    if (isRoomOwner && currentTarget && currentTarget !== selfUser) {
+        ownerControls.style.display = 'block';
+    } else {
+        ownerControls.style.display = 'none';
+    }
+
     applyMicGain();
     applyPlaybackGain();
 }
@@ -592,6 +602,11 @@ async function connectToSignalingServer() {
     // 设置用户访问房间回调
     webrtcManager.onUserJoinedRoom((data) => {
         console.log('用户访问房间:', data);
+        // 记录房主信息
+        if (data.is_owner && data.username === selfUser) {
+            isRoomOwner = true;
+            console.log('当前用户是房主');
+        }
         // 显示用户访问房间弹窗
         if (data.username !== selfUser) {
             showMessagePopup('system', {
@@ -600,6 +615,55 @@ async function connectToSignalingServer() {
                 time: new Date().toLocaleTimeString()
             });
         }
+    });
+
+    // 设置禁言状态回调
+    webrtcManager.getSocket().on('mute_status', (data) => {
+        isMuted = data.muted;
+        console.log('禁言状态:', isMuted);
+        if (isMuted) {
+            alert('您已被房主禁言');
+        }
+    });
+
+    // 进入房间后立即检查禁言状态
+    webrtcManager.checkMuteStatus();
+
+    // 设置禁言状态变更回调
+    webrtcManager.getSocket().on('mute_status_changed', (data) => {
+        isMuted = data.muted;
+        if (isMuted) {
+            alert('您已被房主禁言');
+        } else {
+            alert('您已被解除禁言');
+        }
+    });
+
+    // 设置被踢回调
+    webrtcManager.getSocket().on('user_kicked', (data) => {
+        alert(`您已被房主移出房间: ${data.reason}`);
+        // 跳转到首页
+        window.location.href = '/';
+    });
+
+    // 设置强制断开连接回调
+    webrtcManager.getSocket().on('force_disconnect', () => {
+        window.location.href = '/';
+    });
+
+    // 设置踢人成功回调
+    webrtcManager.getSocket().on('kick_error', (data) => {
+        alert('踢人失败: ' + data.error);
+    });
+
+    // 设置禁言成功回调
+    webrtcManager.getSocket().on('mute_success', (data) => {
+        console.log('禁言操作成功:', data);
+    });
+
+    // 设置禁言失败回调
+    webrtcManager.getSocket().on('mute_error', (data) => {
+        alert('禁言操作失败: ' + data.error);
     });
 
     // 设置WebRTC回调
@@ -879,6 +943,12 @@ function fetchChat() {
 }
 
 function sendChat() {
+    // 检查是否被禁言
+    if (isMuted) {
+        alert('您已被禁言，无法发送消息');
+        return;
+    }
+    
     const input = document.getElementById('chat-input');
     const text = (input.value || '').trim();
     if (!text) return;
@@ -895,6 +965,76 @@ function sendChat() {
 // 加入聊天房间
 function joinChatRoom() {
     // webrtc-manager已自动处理
+}
+
+// 房主操作：踢人
+function kickUser(username) {
+    if (!isRoomOwner) {
+        alert('只有房主才能踢人');
+        return;
+    }
+    if (username === selfUser) {
+        alert('不能踢自己');
+        return;
+    }
+    if (confirm(`确定要将 ${username} 移出房间吗？此操作不可撤销。`)) {
+        webrtcManager.kickUser(username);
+    }
+}
+
+// 房主操作：禁言/解除禁言
+function toggleMuteUser(username) {
+    if (!isRoomOwner) {
+        alert('只有房主才能禁言');
+        return;
+    }
+    if (username === selfUser) {
+        alert('不能禁言自己');
+        return;
+    }
+    if (confirm(`确定要禁言 ${username} 吗？被禁言用户将无法发送文字消息。`)) {
+        webrtcManager.muteUser(username, true);
+    }
+}
+
+// 房主操作：解除禁言
+function unmuteUser(username) {
+    if (!isRoomOwner) {
+        alert('只有房主才能解除禁言');
+        return;
+    }
+    if (confirm(`确定要解除 ${username} 的禁言吗？`)) {
+        webrtcManager.muteUser(username, false);
+    }
+}
+
+// 音量面板中的房主操作处理函数
+function handleMuteUser() {
+    if (!isRoomOwner) {
+        alert('只有房主才能执行此操作');
+        return;
+    }
+    if (!currentTarget || currentTarget === selfUser) {
+        return;
+    }
+    if (confirm(`确定要禁言 ${currentTarget} 吗？被禁言用户将无法发送文字消息。`)) {
+        webrtcManager.muteUser(currentTarget, true);
+        closeVolumePanel();
+    }
+}
+
+function handleKickUser() {
+    if (!isRoomOwner) {
+        alert('只有房主才能执行此操作');
+        return;
+    }
+    if (!currentTarget || currentTarget === selfUser) {
+        return;
+    }
+    if (confirm(`确定要将 ${currentTarget} 移出房间吗？此操作不可撤销。`)) {
+        webrtcManager.kickUser(currentTarget);
+        closeVolumePanel();
+    }
 }
 
 // 粒子系统
